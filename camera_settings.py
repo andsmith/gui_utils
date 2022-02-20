@@ -114,7 +114,7 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
 
     if gui:
         choices = ["%i x %i" % (w, h) for w, h in zip(valid['widths'], valid['heights'])]
-        selection = choose_item_dialog(labels=choices, prompt="Choose camera resolution:")
+        selection = choose_item_dialog(labels=choices, prompt="Choose one of the detected\ncamera resolutions:")
     else:
         while True:
             failed = False
@@ -131,7 +131,7 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
                 print("\n\nPlease enter a valid resolution number!\n")
                 continue
             break
-    if selection == -1:
+    if selection is None or selection == -1:
         return None
     return valid['widths'][selection], valid['heights'][selection]
 

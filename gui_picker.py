@@ -36,12 +36,12 @@ def choose_item_dialog(labels, prompt="Please select one\nof the following:",
 
     def show_choice():
         n = selection.get()
-        logging.info("Item %i selected (%s)" % (n, labels[n]))
+        # logging.info("Item %i selected (%s)" % (n, labels[n]))
         final_choice[0] = n
 
     def finish():
         finished[0]=True
-        logging.info("Selection finalized:  %s" % (final_choice,))
+        # logging.info("Selection finalized:  %s" % (final_choice,))
         root.destroy()
 
     label = tk.Label(root, text=prompt, **label_params)
