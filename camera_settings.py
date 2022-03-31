@@ -7,7 +7,7 @@ Utilities / GUI for changing these webcam settings:
 import pandas as pd
 import cv2
 import ssl
-import sys
+import os
 import json
 import logging
 from gui_picker import ChooseItemDialog, choose_item_text
@@ -117,6 +117,34 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
         selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:",choices=choices)
 
     return valid['widths'][selection], valid['heights'][selection]
+
+
+def count_cameras():
+    """
+    See how many cameras are attached to the computer.
+    :return: number of cameras successfully opened
+
+    WARNING:  Will not behave predictably if any cameras are in use.
+    """
+    n = 0
+    c = None
+    while True:
+        try:
+            if os.name == 'nt':  # windows, to avoid warning
+                c = cv2.VideoCapture(n, cv2.CAP_DSHOW)
+            else:
+                c = cv2.VideoCapture(n)
+            ret, frame = c.read()
+            if frame.size < 10:
+                raise Exception("Out of cameras!")
+            c.release()
+            cv2.destroyAllWindows()
+            n += 1
+        except:
+            c.release()
+            cv2.destroyAllWindows()
+            break
+    return n
 
 
 if __name__ == "__main__":
