@@ -143,6 +143,31 @@ def _make_test_icons(n):
     return imgs
 
 
+def choose_item_text(choices=None, prompt="> "):
+    """
+    No GUI elements, just text mode.
+    """
+    selection = -1
+    while True:
+        failed = False
+        print("\nSelect one of the following (or 0 for None):")
+        for i, choice in enumerate(choices):
+            print("\t%i) %s" % (i + 1, choice))
+        try:
+            selection = int(input(prompt)) - 1
+        except:
+            failed = True
+        if selection < -1 or selection >= len(choices):
+            failed = True
+        if failed:
+            print("\n\nPlease enter a valid choice!!!\n")
+            continue
+        break
+    if selection is None or selection == -1:
+        return None
+    return selection
+
+
 def _test_icon_picker():  # test requires user interaction
     n_icons = 6
     icons = _make_test_icons(n_icons)
@@ -155,9 +180,12 @@ def _test_icon_picker():  # test requires user interaction
 
 
 def _test_picker():  # test requires user interaction
-    choice = ChooseItemDialog().ask_text(choices=['item 1', 'item 2 is longer', 'item 3'])
+    choices = ['item 1', 'item 2 is longer', 'item 3']
+    choice = choose_item_text(choices=choices)
     print("User chose:  %s" % (choice,))
-    choice = ChooseItemDialog().ask_text(choices=['item 1', 'item 2 is longer', 'item 3'])
+    choice = ChooseItemDialog().ask_text(choices=choices)
+    print("User chose:  %s" % (choice,))
+    choice = ChooseItemDialog().ask_text(choices=choices)
     print("User chose:  %s" % (choice,))
 
 

@@ -10,7 +10,7 @@ import ssl
 import sys
 import json
 import logging
-from gui_picker import choose_item_dialog
+from gui_picker import ChooseItemDialog, choose_item_text
 
 RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
 
@@ -110,29 +110,12 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
     valid = probe_resolutions(res, cam_index=camera_index)
     logging.info("\n\t... found %i valid resolutions!" % (len(valid['widths']),))
 
-    selection = None
-
+    choices = ["%i x %i" % (w, h) for w, h in zip(valid['widths'], valid['heights'])]
     if gui:
-        choices = ["%i x %i" % (w, h) for w, h in zip(valid['widths'], valid['heights'])]
-        selection = choose_item_dialog(labels=choices, prompt="Choose one of the detected\ncamera resolutions:")
+        selection = ChooseItemDialog(prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
     else:
-        while True:
-            failed = False
-            print("\nSelect one of the resolutions, or 0 for none.:")
-            for i in range(len(valid['widths'])):
-                print("\t%i) %i x %i" % (i + 1, valid['widths'][i], valid['heights'][i]))
-            try:
-                selection = int(input("> ")) - 1
-            except:
-                failed = True
-            if selection < -1 or selection > len(valid['widths']):
-                failed = True
-            if failed:
-                print("\n\nPlease enter a valid resolution number!\n")
-                continue
-            break
-    if selection is None or selection == -1:
-        return None
+        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:",choices=choices)
+
     return valid['widths'][selection], valid['heights'][selection]
 
 
