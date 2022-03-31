@@ -10,7 +10,7 @@ from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 
-from camera_settings import user_pick_resolution, count_cameras
+from .camera_settings import user_pick_resolution, count_cameras
 
 
 def get_cv2_prop_names():
@@ -27,7 +27,7 @@ class Camera(object):
 
     def __init__(self, cam_ind, callback, settings=None, prompt_resolution=False):
         """
-        Acquire and start a webcam.
+        Webcam wrapper.  If user is asked for resolution, don't return until then.
 
         :param cam_ind:  cv2 camera index
         :param callback:  function(frame, time) to call with new frames
@@ -39,6 +39,7 @@ class Camera(object):
         self._prompt_resolution = prompt_resolution
         self._cam_ind = cam_ind
         self._shutdown = False
+        self._started = False
         self._is_windows = os.name == 'nt'
         self._cam_thread = Thread(target=self._cam_thread_proc)
         self._callback = callback
@@ -46,6 +47,21 @@ class Camera(object):
         self._settings = settings if settings is not None else {}
         self._settings_lock = Lock()  # need to be set in same thread as camera
         self._settings_changes_q = Queue()  # each should be a dict with one setting--value pair
+
+        self._target_resolution = None
+        if prompt_resolution:
+            resolution = user_pick_resolution(self._cam_ind)
+            if resolution is None:
+                self.shutdown()
+                logging.info("User exit.")
+                raise ShutdownException()
+            self._target_resolution = resolution
+
+
+    def start(self):
+        if self._started:
+            raise Exception("Camera already started!")
+        self._started = True
         self._cam_thread.start()
 
     def shutdown(self):
@@ -88,14 +104,6 @@ class Camera(object):
         Open current camera, apply settings, prompt user if necessary
         :return: VideoCapture() object
         """
-        target_resolution = None
-        if self._prompt_resolution:
-            resolution = user_pick_resolution(self._cam_ind)
-            if resolution is None:
-                self.shutdown()
-                logging.info("User exit.")
-                raise ShutdownException()
-            target_resolution = resolution
 
         logging.info("Acquiring camera %i..." % (self._cam_ind,))
         if self._is_windows:
@@ -103,10 +111,11 @@ class Camera(object):
         else:
             cam = cv2.VideoCapture(self._cam_ind)
         logging.info("Camera %i acquired." % (self._cam_ind,))
-        if target_resolution is not None:
-            self.set_resolution(target_resolution)
 
-        self._apply_settings(cam)
+        if self._target_resolution is not None:
+            self.set_resolution(self._target_resolution)
+            self._apply_settings(cam)
+
         return cam
 
     def _cam_thread_proc(self, ):
@@ -163,7 +172,6 @@ class CamTester(object):
         k = cv2.waitKey(1)
         if k != -1:
             self._cam.shutdown()
-
 
 
 def _test_camera():

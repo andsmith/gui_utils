@@ -10,7 +10,7 @@ import ssl
 import os
 import json
 import logging
-from gui_picker import ChooseItemDialog, choose_item_text
+from .gui_picker import ChooseItemDialog, choose_item_text
 
 RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
 
