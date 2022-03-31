@@ -1,128 +1,134 @@
+"""
+Dialog box for picking options, either list of text items, or list of images/icons.
+"""
 import tkinter as tk
+from tkinter import ttk
 import logging
 import numpy as np
 from PIL import Image, ImageTk
-import matplotlib.pyplot as plt
 from copy import deepcopy
 
 
-def choose_item_dialog(labels, icons=None, prompt="Please select one\nof the following:",
-                       button_text="Continue...", label_params=None, item_params=None, button_params=None,
-                       default_selection=0):
+class ChooseItemDialog(object):
     """
-    Open a dialog box with some text, radio buttons, and continue button.
-    :param labels:  text for radio buttons, list of images to select one of those
-    :param icons:  (grid (list of lists) of icons, grid of selected icons), each image WxHx3 uint8
-    :param prompt:  Label above items
-    :param button_text:  text for selection button
-    :param label_params:  dict with kwargs to tk.Label
-    :param item_params:  dict with kwargs for tk.RadioButton
-    :param button_params:  dict with kwargs for tk.Button
-    :param default_selection:  Which item starts selected
-    :return: index of label item clicked or None for window closed
+    Class for dialog box.
     """
 
+    def __init__(self, prompt="Select one of the following:",
+                 button_text="Continue...", label_params=None, item_params=None, button_params=None,
+                 grid_spacing=None, initial_selection=0, window_title="Make a selection."):
+
+        """"
+        :param prompt:  Label above items
+        :param button_text:  text for selection button
+        :param item_params:  dict with kwargs for tk.RadioButton
+        :param button_params:  dict with kwargs for tk.Button
+        :param initial_selection:  Which item starts selected
+        :param grid_spacing: {label: {'pady': 10}, items: {...}, button: {...}}  (unused for text mode)
+        :param window_title: at top of window.
+        :return: index of label item clicked or None for window closed
+        """
+        self._window_title = window_title
+        self._initial_selection = initial_selection
+        self._prompt = prompt
+        self._button_text = button_text
+        self._item_params = ChooseItemDialog.update_default_params({}, item_params)  # add more defaults in {}
+        self._button_params = ChooseItemDialog.update_default_params({}, button_params)
+        self._label_params = ChooseItemDialog.update_default_params({}, label_params)
+        self._grid_spacing = {'items': {'padx': 7, 'pady': 7}, 'label': {'pady': 10},
+                              'button': {'pady': 10}} if grid_spacing is None else grid_spacing
+
+    @staticmethod
     def update_default_params(defaults, updates):
         if updates is not None:
             defaults = deepcopy(defaults)
             defaults.update(updates)
         return defaults
 
-    button_params = update_default_params({}, button_params)
+    def _tk_init(self):
+        self._root = tk.Tk()
+        self._root.title(self._window_title)
+        self._content = ttk.Frame(self._root)
 
-    root = tk.Tk()
-    selection = tk.IntVar(value=0)
+        self._var = tk.IntVar()
+        self._var.set(0)
 
-    # set initial selection
-    selection.set(default_selection)
-    final_choice = [default_selection]
-    finished = [False]
+    def _finish(self):
+        logging.info("Icon selected:  %s" % (self._var.get(),))
+        self._root.destroy()
 
-    def show_choice():
-        n = selection.get()
-        # logging.info("Item %i selected (%s)" % (n, labels[n]))
-        final_choice[0] = n
+    def _click(self):
+        pass
+        logging.info("Icon clicked:  %s" % (self._var.get(),))
 
-    def finish():
-        finished[0] = True
-        # logging.info("Selection finalized:  %s" % (final_choice,))
-        root.destroy()
+    def ask_icons(self, icons):
+        """
+        Ask user to pick one of the icons.
+        :param icons: grid (list of lists) of images to pick from. If there are n icons, and n< n_rows *n_cols,
+            only the last row should have fewer than the others.
+        """
+        self._tk_init()
 
-    if icons is None:
-        # text mode
+        # so grid "stretches" when window is resided
+        self._root.rowconfigure(0, weight=1)
+        self._root.columnconfigure(0, weight=1)
+        self._content.grid(column=0, row=0, sticky="news")
 
-        indent_px = 20
+        icon_val = 0
+        n_rows, n_cols = len(icons), len(icons[0])
 
-        # "label" is the text at top
-        label_params = update_default_params({'padx': indent_px, 'pady': 5}, label_params)
+        images = [[ImageTk.PhotoImage(Image.fromarray(ic)) for ic in icon_row] for icon_row in icons]
+        label = tk.Label(self._content, text=self._prompt, **self._label_params)
+        label.grid(row=0, columnspan=n_cols, **self._grid_spacing['label'])
+        button = tk.Button(self._content, text=self._button_text, command=self._finish, **self._button_params)
+        button.grid(row=n_rows + 1, columnspan=n_cols, **self._grid_spacing['button'])
+        for row, image_row in enumerate(images):
+            for col, im in enumerate(image_row):
+                rb = tk.Radiobutton(self._content, indicatoron=0,
+                                    variable=self._var,
+                                    value=icon_val,
+                                    image=im, **self._item_params)
+                rb.grid(column=col, row=row + 1, **self._grid_spacing['items'])
+                icon_val += 1
 
-        # "items" are the option to pick
-        item_params = update_default_params({'padx': indent_px, 'pady': 5}, item_params)
+        self._content.columnconfigure(tuple(range(n_cols)), weight=1)
+        self._content.rowconfigure(tuple(range(n_rows + 2)), weight=1)
 
-        label = tk.Label(root, text=prompt, **label_params)
-        label.pack(pady=5, expand=True)
+        self._root.mainloop()
+        return self._var.get()
 
-        for i, label in enumerate(labels):
-            rb = tk.Radiobutton(root,
+    def ask_text(self, choices):
+        """
+        Ask user to pick one of the text choices.
+        :param choices: list of strings.
+        """
+        self._tk_init()
+
+        label = tk.Label(self._root, text=self._prompt, **self._label_params)
+        label.pack(expand=True, **self._grid_spacing['label'])
+
+        for i, label in enumerate(choices):
+            rb = tk.Radiobutton(self._root,
                                 text=label,
-                                variable=selection,
-                                command=show_choice,
-                                value=i,
-                                **item_params)
-            rb.pack(anchor=tk.W, expand=True)
+                                variable=self._var,
+                                value=i, command=self._click,
+                                **self._item_params)
+            rb.pack(anchor=tk.W, expand=True, **self._grid_spacing['items'])
 
-        button = tk.Button(root,
-                           text=button_text,
-                           command=finish,
-                           **button_params)
-        button.pack(expand=True)
+        button = tk.Button(self._root,
+                           text=self._button_text,
+                           command=self._finish,
+                           **self._button_params)
+        button.pack(expand=True, **self._grid_spacing['button'])
 
-    else:
-        # ICON mode
-        label_params = update_default_params({}, label_params)
-        item_params = update_default_params({'padx': 10, 'pady': 10,}, item_params)
-
-        unsel, sel = icons
-        n_cols, n_rows = len(unsel), len(unsel[0])
-
-        label = tk.Label(root, text=prompt)
-        label.grid(row=0, column=0, columnspan=n_cols)
-
-        icon_values = 0
-        for row in range(len(unsel)):
-            for col in range(len(unsel[row])):
-                s, us = sel[row][col], unsel[row][col]
-                if s is None:
-                    break
-
-                unsel_icon = ImageTk.PhotoImage(Image.fromarray(us), name=labels[row][col])
-                sel_icon = ImageTk.PhotoImage(Image.fromarray(s))
-                rb = tk.Radiobutton(root,
-                                    image=unsel_icon,
-                                    selectimage=sel_icon,
-                                    indicatoron=0,
-                                    variable=selection,
-                                    command=show_choice,
-                                    value=icon_values,
-                                    **item_params)
-                icon_values += 1
-                rb.grid(column=col, row=row + 1)
-
-        button = tk.Button(root,
-                           text=button_text,
-                           command=finish)
-        button.grid(row=n_rows + 1, column=0, columnspan=n_cols)
-
-    root.mainloop()
-    if not finished[0]:
-        return None
-    return final_choice[0]
+        self._root.mainloop()
+        return self._var.get()
 
 
 def _make_test_icons(n):
     imgs = []
     icon_res = 60, 60
-    color_ranges = np.linspace(0, 254, n+1)
+    color_ranges = np.linspace(0, 254, n + 1)
     for ind in range(n):
 
         img = np.zeros((icon_res[1], icon_res[0], 3)).astype(np.uint8) + 254
@@ -130,43 +136,33 @@ def _make_test_icons(n):
         for x in range(10):
             io = np.random.randint(0, icon_res[1] - s)
             jo = np.random.randint(0, icon_res[0] - s)
-            color = np.random.randint(color_ranges[ind], color_ranges[ind+1], 3)
+            color = np.random.randint(color_ranges[ind], color_ranges[ind + 1], 3)
             img[jo:jo + s, io:io + s, :] = color
         imgs.append(img)
 
-    select_width = 6
-    selected_imgs = []
-    for img in imgs:
-        s_img = img * 0 + 200
-        s_img[select_width:-select_width, select_width:-select_width, :] = \
-            img[select_width:-select_width, select_width:-select_width, :]
-        selected_imgs.append(s_img)
+    return imgs
 
 
-    return imgs, selected_imgs
-
-
-def _test_icon_picker():
+def _test_icon_picker():  # test requires user interaction
     n_icons = 6
-    u_icons, s_icons = _make_test_icons(n_icons)
-    labels = ["Item %i" % (i + 1,) for i in range(n_icons)]
+    icons = _make_test_icons(n_icons)
+    icon_grid = [icons[:3], icons[3:5]]
 
-    # make grids
-    unselected = [u_icons[:3], u_icons[3:5]]
-    selected = [s_icons[:3], s_icons[3:5]]
-    labels = [labels[:3], labels[3:5]]
-
-    choice = choose_item_dialog(labels=labels, icons=(unselected, selected))
+    choice = ChooseItemDialog().ask_icons(icons=icon_grid)
+    print("User chose:  %s" % (choice,))
+    choice = ChooseItemDialog().ask_icons(icons=icon_grid)
     print("User chose:  %s" % (choice,))
 
 
-def _test_picker():  # requires user interaction
-    choice = choose_item_dialog(labels=['item 1', 'item 2 is longer', 'item 3'])
+def _test_picker():  # test requires user interaction
+    choice = ChooseItemDialog().ask_text(choices=['item 1', 'item 2 is longer', 'item 3'])
+    print("User chose:  %s" % (choice,))
+    choice = ChooseItemDialog().ask_text(choices=['item 1', 'item 2 is longer', 'item 3'])
     print("User chose:  %s" % (choice,))
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    #import ipdb; ipdb.set_trace()
-    #_test_picker()
+
+    _test_picker()
     _test_icon_picker()
