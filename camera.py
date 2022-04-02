@@ -10,7 +10,8 @@ from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 
-from .camera_settings import user_pick_resolution, count_cameras
+from camera_settings import user_pick_resolution, count_cameras
+from gui_picker import choose_item_text, ChooseItemDialog
 
 
 def get_cv2_prop_names():
@@ -123,7 +124,7 @@ class Camera(object):
             self.set_resolution(self._target_resolution)
             self._apply_settings(cam)
         self._resolution = tuple(np.int64([cam.get(cv2.CAP_PROP_FRAME_WIDTH),
-                                          cam.get(cv2.CAP_PROP_FRAME_HEIGHT)]))
+                                           cam.get(cv2.CAP_PROP_FRAME_HEIGHT)]))
         return cam
 
     def _cam_thread_proc(self, ):
@@ -161,9 +162,8 @@ class CamTester(object):
         self._print_interval = 30
         self._t_start = None
         self._cam_index = cam_index
-        self._n_cams = count_cameras()
-        logging.info("Computer has %i cameras." % (self._n_cams))
         self._cam = Camera(self._cam_index, self._show_img, settings=settings, prompt_resolution=True)
+        self._cam.start()
 
     def _show_img(self, img, t):
         self._n_frames += 1
@@ -182,8 +182,38 @@ class CamTester(object):
             self._cam.shutdown()
 
 
+def pick_camera(gui=True):
+    """
+    Ask user which camera to use.
+    """
+    prompt = "Please select one of the detected cameras:"
+    print("Detecting cameras...")
+    n_cams = count_cameras()
+    logging.info("Detected %i cameras." % (n_cams,))
+    if n_cams < 1:
+        raise Exception("Webcam required for this version")
+    elif n_cams == 1:
+        cam_ind = 0
+    else:
+        choices = ['camera 0 (for laptops, probably user-facing)',
+                   'camera 1 (probably forward-facing)']
+        choices.extend(["camera %i" % (ind + 2,) for ind in range(n_cams - 2)])
+        if gui:
+            chooser = ChooseItemDialog(prompt=prompt)
+            cam_ind = chooser.ask_text(choices)
+        else:
+            cam_ind = choose_item_text(choices, prompt)
+        if cam_ind is None:
+            raise Exception("User selected no camera.")
+        print("Chose", cam_ind)
+    return cam_ind
+
+
 def _test_camera():
-    CamTester(0)
+    cam_ind = pick_camera(gui=False)
+    cam_ind = pick_camera(gui=True)
+    print("Done testing camera picker.")
+    CamTester(cam_ind)
 
 
 if __name__ == "__main__":
