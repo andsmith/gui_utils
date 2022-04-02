@@ -47,7 +47,7 @@ class Camera(object):
         self._settings = settings if settings is not None else {}
         self._settings_lock = Lock()  # need to be set in same thread as camera
         self._settings_changes_q = Queue()  # each should be a dict with one setting--value pair
-
+        self._resolution = None
         self._target_resolution = None
         if prompt_resolution:
             resolution = user_pick_resolution(self._cam_ind)
@@ -56,7 +56,6 @@ class Camera(object):
                 logging.info("User exit.")
                 raise ShutdownException()
             self._target_resolution = resolution
-
 
     def start(self):
         if self._started:
@@ -68,6 +67,12 @@ class Camera(object):
         logging.info("Camera got shutdown signal")
         self._shutdown = True
 
+    def get_resolution(self, wait=False):
+        while wait and self._resolution is None:
+            logging.info("Waiting for camera to start...")
+            time.sleep(0.2)
+        return self._resolution
+
     def set_resolution(self, target_resolution=None):
         """
         Add settings changes to queue (should happen in camera thread to be safe).
@@ -76,6 +81,8 @@ class Camera(object):
             width, height = target_resolution
             self._settings_changes_q.put({cv2.CAP_PROP_FRAME_WIDTH: width})
             self._settings_changes_q.put({cv2.CAP_PROP_FRAME_HEIGHT: height})
+            self._resolution = tuple(np.int64(target_resolution))  # not effective immediately
+
             logging.info("Resolution change added to settings change queue:  %i x %i" % target_resolution)
         else:
             logging.info("No target resolution, camera not changed.")
@@ -115,7 +122,8 @@ class Camera(object):
         if self._target_resolution is not None:
             self.set_resolution(self._target_resolution)
             self._apply_settings(cam)
-
+        self._resolution = tuple(np.int64([cam.get(cv2.CAP_PROP_FRAME_WIDTH),
+                                          cam.get(cv2.CAP_PROP_FRAME_HEIGHT)]))
         return cam
 
     def _cam_thread_proc(self, ):

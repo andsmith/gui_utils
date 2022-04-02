@@ -13,6 +13,7 @@ class ChooseItemDialog(object):
     """
     Class for dialog box.
     """
+    CONFIG = {'label_font': ("Arial", 12),'button_font': ("Arial", 12)}
 
     def __init__(self, prompt="Select one of the following:",
                  button_text="Continue...", label_params=None, item_params=None, button_params=None,
@@ -78,9 +79,11 @@ class ChooseItemDialog(object):
         n_rows, n_cols = len(icons), len(icons[0])
 
         images = [[ImageTk.PhotoImage(Image.fromarray(ic)) for ic in icon_row] for icon_row in icons]
-        label = tk.Label(self._content, text=self._prompt, **self._label_params)
+        label = tk.Label(self._content, text=self._prompt, font=ChooseItemDialog.CONFIG['label_font'],
+                         **self._label_params)
         label.grid(row=0, columnspan=n_cols, **self._grid_spacing['label'])
-        button = tk.Button(self._content, text=self._button_text, command=self._finish, **self._button_params)
+        button = tk.Button(self._content, text=self._button_text, command=self._finish,
+                           font=ChooseItemDialog.CONFIG['button_font'], **self._button_params)
         button.grid(row=n_rows + 1, columnspan=n_cols, **self._grid_spacing['button'])
         for row, image_row in enumerate(images):
             for col, im in enumerate(image_row):
@@ -125,22 +128,35 @@ class ChooseItemDialog(object):
         return self._var.get()
 
 
+def make_test_image(shape, color_range = (0, 255), n_rects=10):
+    if len(shape)==2:
+        shape = (shape[0], shape[1], 3)
+    n_channels = shape[2]
+    img = np.zeros(shape).astype(np.uint8) + 254
+    s = 15
+    for x in range(n_rects):
+        io = np.random.randint(0, shape[0] - s)
+        jo = np.random.randint(0, shape[1] - s)
+        color = np.random.randint(color_range[0], color_range[1], n_channels)
+        if n_channels==4:
+            color[3]=255
+        img[io:io + s, jo:jo + s, :] = color
+    return img
+
+
 def _make_test_icons(n):
     imgs = []
     icon_res = 60, 60
     color_ranges = np.linspace(0, 254, n + 1)
+
     for ind in range(n):
 
-        img = np.zeros((icon_res[1], icon_res[0], 3)).astype(np.uint8) + 254
-        s = 15
-        for x in range(10):
-            io = np.random.randint(0, icon_res[1] - s)
-            jo = np.random.randint(0, icon_res[0] - s)
-            color = np.random.randint(color_ranges[ind], color_ranges[ind + 1], 3)
-            img[jo:jo + s, io:io + s, :] = color
+        img = make_test_image(icon_res, (color_ranges[ind], color_ranges[ind + 1]))
         imgs.append(img)
 
     return imgs
+
+
 
 
 def choose_item_text(choices=None, prompt="> "):
