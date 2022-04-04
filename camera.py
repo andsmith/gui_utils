@@ -10,8 +10,8 @@ from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 
-from camera_settings import user_pick_resolution, count_cameras
-from gui_picker import choose_item_text, ChooseItemDialog
+from .camera_settings import user_pick_resolution, count_cameras
+from .gui_picker import choose_item_text, ChooseItemDialog
 
 
 def get_cv2_prop_names():
