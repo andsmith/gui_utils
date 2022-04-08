@@ -13,9 +13,10 @@ class MouseButtons(enum.Enum):
     RIGHT = 2
 
 
-MOD_KEYS = (keyboard.Key.shift,
-            keyboard.Key.alt,
-            keyboard.Key.ctrl)
+MOD_KEYS_MAP = {keyboard.Key.shift: 'shift',
+                keyboard.Key.ctrl: "ctrl",
+                keyboard.Key.alt: 'alt'}
+MOD_KEY_VALUES = tuple([MOD_KEYS_MAP[k] for k in MOD_KEYS_MAP])
 
 
 class ButtonStates(enum.Enum):
@@ -36,24 +37,18 @@ class MouseKeyboardState(object):
         self._position = None
         self._prev_position = None
         self._mouse_button_states = {m: ButtonStates.UP for m in MouseButtons}  # maps button enum to click location
-        self._key_states = {k: False for k in MOD_KEYS}  # maps key enums to True (down) or False (up)
-        print(self._key_states)
-        """
+        self._key_states = {k: False for k in MOD_KEY_VALUES}  # maps key name (e.g. 'shift') to True (down) or False (up)
         self._keyboard_listener = keyboard.Listener(on_press=self._on_key_press,
                                                     on_release=self._on_key_release)
         self._keyboard_listener.start()
-        """
 
     def _on_key_press(self, key):
-        if hasattr(key, 'name') and key in MOD_KEYS:
-            self._key_states[key] = True
-        print("Press")
-        return False
+        if hasattr(key, 'name') and key in MOD_KEYS_MAP:
+            self._key_states[MOD_KEYS_MAP[key]] = True
 
     def _on_key_release(self, key):
-        if hasattr(key, 'name') and key.name in MOD_KEYS:
-            self._key_states[key] = False
-        return False
+        if hasattr(key, 'name') and key in MOD_KEYS_MAP:
+            self._key_states[MOD_KEYS_MAP[key]] = False
 
     def __del__(self):
         # self._keyboard_listener.stop()
