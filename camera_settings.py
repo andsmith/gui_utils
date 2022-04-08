@@ -10,7 +10,7 @@ import ssl
 import os
 import json
 import logging
-import gui_picker
+from .gui_picker import ChooseItemDialog, choose_item_text
 
 RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
 
@@ -112,9 +112,9 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
 
     choices = ["%i x %i" % (w, h) for w, h in zip(valid['widths'], valid['heights'])]
     if gui:
-        selection = gui_picker.ChooseItemDialog(prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
+        selection = ChooseItemDialog(prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
     else:
-        selection = gui_picker.choose_item_text(prompt="Choose one of the detected\ncamera resolutions:",choices=choices)
+        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:",choices=choices)
 
     return valid['widths'][selection], valid['heights'][selection]
 

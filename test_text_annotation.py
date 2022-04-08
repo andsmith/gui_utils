@@ -1,12 +1,12 @@
-import gui_picker
-import text_annotation
+from .gui_picker import make_test_image
+from .text_annotation import StatusMessages
 import cv2
 
 
 def _test_status_msgs():  # interactive test
-    base_img = gui_picker.make_test_image((480, 640, 3), n_rects=100)
+    base_img = make_test_image((480, 640, 3), n_rects=100)
 
-    m = text_annotation.StatusMessages(img_shape=base_img.shape,
+    m = StatusMessages(img_shape=base_img.shape,
                                        text_color=[255, 255, 255],
                                        bkg_color=[255, 40, 0],
                                        bkg_alpha=.65441, spacing=5)
