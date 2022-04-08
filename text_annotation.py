@@ -5,7 +5,7 @@ Utilities for adding text to images (uses cv2 drawing functions)
 import cv2
 import numpy as np
 import time
-from .gui_picker import make_test_image
+import gui_picker
 
 
 def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
@@ -62,34 +62,39 @@ class StatusMessages(object):
         self._thickness = 1
 
         self._msgs = []
+
     def add_msgs(self, msgs, *args, **kwargs):
         for msg in msgs:
             self.add_msg(msg, *args, **kwargs)
 
-    def add_msg(self, msg, duration_sec=5.0):
+    def remove_msg(self, name):
+        self._msgs = [m for m in self._msgs if m['name'] != name]  # remove any old
+
+
+    def add_msg(self, msg, name, duration_sec=5.0):
         """
         Add a message to the active list.
         :param msg: string, the text to display
+        :param name:  name of message, will replace existing one.
         :param duration_sec:  how long the message should stay up, or 0 for forever (until cleared)
         """
-
+        self.remove_msg(name)
         scale = self._calc_font_scale(msg)
         (width, ascend), descend = cv2.getTextSize(msg, fontFace=self._font, fontScale=scale, thickness=self._thickness)
         self._msgs.append({'msg': msg,
+                           'name': name,
                            'start': time.time(),
                            'duration_sec': duration_sec,
                            'width': width,
                            'ascend': ascend,
                            'descend': descend,
                            'scale': scale})
-        msg_height= np.sum([x['ascend']+x['descend'] for x in self._msgs]) + self._spacing * (len(self._msgs)-1)
+        msg_height = np.sum([x['ascend'] + x['descend'] for x in self._msgs]) + self._spacing * (len(self._msgs) - 1)
         box_height = msg_height + self._margin_px * 2
 
         if box_height + self._margin_px * 2 >= self._img_shape[0]:
-
-
-            print(msg)
-            raise Exception("Too much text!")
+            print("\n".join(["%i %s" % (m['duration_sec'], m['msg']) for m in self._msgs]))
+            raise Exception("Tooooo much text!")
 
     def _calc_font_scale(self, msg):
         return get_best_font_scale(msg, self._font, self._thickness, self._msg_width, self._max_font_scale)
@@ -134,7 +139,6 @@ class StatusMessages(object):
             text_y += msg['descend'] + self._spacing
 
         if self._bkg_alpha is not None:
-
             blend = (1.0 - self._bkg_alpha) * img[box_top:box_bottom, box_left:box_right,
                                               :] + self._bkg_alpha * text_img
             text_img = np.uint8(blend)
@@ -142,17 +146,17 @@ class StatusMessages(object):
 
 
 def _test_status_msgs():  # interactive test
-    base_img = make_test_image((480, 640, 3), n_rects=100)
+    base_img = gui_picker.make_test_image((480, 640, 3), n_rects=100)
 
     m = StatusMessages(img_shape=base_img.shape,
                        text_color=[255, 255, 255],
                        bkg_color=[255, 40, 0],
                        bkg_alpha=.65441, spacing=5)
-    m.add_msg("This message should disappear after 5 seconds.", duration_sec=5.0)
+    m.add_msg("This message should disappear after 5 seconds.","msg 1", duration_sec=5.0)
     m.add_msg("This message should disappear after 7 seconds and it's really long, so it should be smaller.",
-              duration_sec=7.0)
-    m.add_msg("This message should stay forever (q to quit).", duration_sec=0)
-    m.add_msg("This message should disappear after 10 seconds.", duration_sec=10.0)
+              "msg 2",duration_sec=7.0)
+    m.add_msg("This message should stay forever (q to quit).","msg 3", duration_sec=0)
+    m.add_msg("This message should disappear after 10 seconds.","msg 4", duration_sec=10.0)
     while True:
 
         frame = base_img.copy()
