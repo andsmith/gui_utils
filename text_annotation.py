@@ -169,3 +169,4 @@ class StatusMessages(object):
                         self._thickness)
             text_y += text_dims[l]['descend'] + self._spacing
         self._txt_img = text_img
+
