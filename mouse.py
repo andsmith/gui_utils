@@ -3,7 +3,7 @@ Hold state of mouse, for interacting with cv2 windows.
 """
 import cv2
 from pynput import keyboard
-
+import logging
 import enum
 
 
@@ -13,13 +13,9 @@ class MouseButtons(enum.Enum):
     RIGHT = 2
 
 
-KEYS = ['shift', 'ctrl', 'alt']  # names from pynput.keyboard
-
-
-class ModKeys(enum.Enum):
-    SHIFT = 10
-    ALT = 11
-    CTRL = 12
+MOD_KEYS = (keyboard.Key.shift,
+            keyboard.Key.alt,
+            keyboard.Key.ctrl)
 
 
 class ButtonStates(enum.Enum):
@@ -40,22 +36,28 @@ class MouseKeyboardState(object):
         self._position = None
         self._prev_position = None
         self._mouse_button_states = {m: ButtonStates.UP for m in MouseButtons}  # maps button enum to click location
-        self._key_states = {k: False for k in KEYS}  # maps key enums to True (down) or False (up)
-
+        self._key_states = {k: False for k in MOD_KEYS}  # maps key enums to True (down) or False (up)
+        print(self._key_states)
+        """
         self._keyboard_listener = keyboard.Listener(on_press=self._on_key_press,
                                                     on_release=self._on_key_release)
         self._keyboard_listener.start()
+        """
 
     def _on_key_press(self, key):
-        if hasattr(key, 'name') and key.name in KEYS:
-            self._key_states[key.name] = True
+        if hasattr(key, 'name') and key in MOD_KEYS:
+            self._key_states[key] = True
+        print("Press")
+        return False
 
     def _on_key_release(self, key):
-        if hasattr(key, 'name') and key.name in KEYS:
-            self._key_states[key.name] = False
+        if hasattr(key, 'name') and key.name in MOD_KEYS:
+            self._key_states[key] = False
+        return False
 
     def __del__(self):
-        self._keyboard_listener.stop()
+        # self._keyboard_listener.stop()
+        logging.info("Stopped watching keyboard.")
 
     def get_state(self):
         return {'mouse_buttons': self._mouse_button_states,

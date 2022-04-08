@@ -10,8 +10,8 @@ from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 
-from .camera_settings import user_pick_resolution, count_cameras
-from .gui_picker import choose_item_text, ChooseItemDialog
+import camera_settings  # import user_pick_resolution, count_cameras
+import gui_picker  # import choose_item_text, ChooseItemDialog
 
 
 def get_cv2_prop_names():
@@ -51,7 +51,7 @@ class Camera(object):
         self._resolution = None
         self._target_resolution = None
         if prompt_resolution:
-            resolution = user_pick_resolution(self._cam_ind)
+            resolution = camera_settings.user_pick_resolution(self._cam_ind)
             if resolution is None:
                 self.shutdown()
                 logging.info("User exit.")
@@ -188,7 +188,7 @@ def pick_camera(gui=True):
     """
     prompt = "Please select one of the detected cameras:"
     print("Detecting cameras...")
-    n_cams = count_cameras()
+    n_cams = camera_settings.count_cameras()
     logging.info("Detected %i cameras." % (n_cams,))
     if n_cams < 1:
         raise Exception("Webcam required for this version")
@@ -199,23 +199,12 @@ def pick_camera(gui=True):
                    'camera 1 (probably forward-facing)']
         choices.extend(["camera %i" % (ind + 2,) for ind in range(n_cams - 2)])
         if gui:
-            chooser = ChooseItemDialog(prompt=prompt)
+            chooser = cam_ind = gui_picker.ChooseItemDialog(prompt=prompt)
             cam_ind = chooser.ask_text(choices)
         else:
-            cam_ind = choose_item_text(choices, prompt)
+            cam_ind = gui_picker.choose_item_text(choices, prompt)
         if cam_ind is None:
             raise Exception("User selected no camera.")
         print("Chose", cam_ind)
     return cam_ind
 
-
-def _test_camera():
-    cam_ind = pick_camera(gui=False)
-    cam_ind = pick_camera(gui=True)
-    print("Done testing camera picker.")
-    CamTester(cam_ind)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    _test_camera()
