@@ -5,7 +5,6 @@ Utilities for adding text to images (uses cv2 drawing functions)
 import cv2
 import numpy as np
 import time
-import gui_picker
 
 
 def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
@@ -63,15 +62,15 @@ class StatusMessages(object):
 
         self._msgs = []
 
-    def add_msgs(self, msgs, *args, **kwargs):
-        for msg in msgs:
-            self.add_msg(msg, *args, **kwargs)
+    def add_msgs(self, msgs, name, *args, **kwargs):
+        for i, msg in enumerate(msgs):
+            msg_name = "%s_%i" % (name, i)
+            self.add_msg(msg, msg_name, *args, **kwargs)
 
     def remove_msg(self, name):
         self._msgs = [m for m in self._msgs if m['name'] != name]  # remove any old
 
-
-    def add_msg(self, msg, name, duration_sec=5.0):
+    def add_msg(self, msg, name, duration_sec=0.0):
         """
         Add a message to the active list.
         :param msg: string, the text to display
@@ -143,30 +142,3 @@ class StatusMessages(object):
                                               :] + self._bkg_alpha * text_img
             text_img = np.uint8(blend)
         img[box_top:box_bottom, box_left:box_right, :3] = text_img
-
-
-def _test_status_msgs():  # interactive test
-    base_img = gui_picker.make_test_image((480, 640, 3), n_rects=100)
-
-    m = StatusMessages(img_shape=base_img.shape,
-                       text_color=[255, 255, 255],
-                       bkg_color=[255, 40, 0],
-                       bkg_alpha=.65441, spacing=5)
-    m.add_msg("This message should disappear after 5 seconds.","msg 1", duration_sec=5.0)
-    m.add_msg("This message should disappear after 7 seconds and it's really long, so it should be smaller.",
-              "msg 2",duration_sec=7.0)
-    m.add_msg("This message should stay forever (q to quit).","msg 3", duration_sec=0)
-    m.add_msg("This message should disappear after 10 seconds.","msg 4", duration_sec=10.0)
-    while True:
-
-        frame = base_img.copy()
-        m.annotate_img(frame)
-        cv2.imshow("output", frame)
-        k = cv2.waitKey(1)
-        if k == ord('q'):
-            break
-    cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    _test_status_msgs()
