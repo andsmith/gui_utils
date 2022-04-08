@@ -84,7 +84,7 @@ class StatusMessages(object):
                            'scale': scale})
         msg_height= np.sum([x['ascend']+x['descend'] for x in self._msgs]) + self._spacing * (len(self._msgs)-1)
         box_height = msg_height + self._margin_px * 2
-        print(box_height)
+
         if box_height + self._margin_px * 2 >= self._img_shape[0]:
 
 
