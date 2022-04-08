@@ -26,6 +26,11 @@ def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, s
     return best_width[1]
 
 
+def get_best_group_font_size(text_lines, *args, **kwargs):
+    sizes = [get_best_font_scale(line, *args, **kwargs) for line in text_lines]
+    return np.min(sizes)
+
+
 class StatusMessages(object):
     """
     Class to add text messages to the bottom of images/frames.
@@ -60,6 +65,10 @@ class StatusMessages(object):
         self._msg_width = img_shape[1] - margin_px * 4
         self._thickness = 1
 
+        # Stuff not recalculated every frame, only when messages change
+        self._font_scale = None
+        self._txt_img = None
+        self._txt_box = None
         self._msgs = []
 
     def add_msgs(self, msgs, name, *args, **kwargs):
@@ -69,6 +78,7 @@ class StatusMessages(object):
 
     def remove_msg(self, name):
         self._msgs = [m for m in self._msgs if m['name'] != name]  # remove any old
+        self._txt_img = None  # reset
 
     def add_msg(self, msg, name, duration_sec=0.0):
         """
@@ -78,35 +88,31 @@ class StatusMessages(object):
         :param duration_sec:  how long the message should stay up, or 0 for forever (until cleared)
         """
         self.remove_msg(name)
-        scale = self._calc_font_scale(msg)
-        (width, ascend), descend = cv2.getTextSize(msg, fontFace=self._font, fontScale=scale, thickness=self._thickness)
         self._msgs.append({'msg': msg,
                            'name': name,
                            'start': time.time(),
-                           'duration_sec': duration_sec,
-                           'width': width,
-                           'ascend': ascend,
-                           'descend': descend,
-                           'scale': scale})
-        msg_height = np.sum([x['ascend'] + x['descend'] for x in self._msgs]) + self._spacing * (len(self._msgs) - 1)
-        box_height = msg_height + self._margin_px * 2
+                           'duration_sec': duration_sec, })
 
-        if box_height + self._margin_px * 2 >= self._img_shape[0]:
-            print("\n".join(["%i %s" % (m['duration_sec'], m['msg']) for m in self._msgs]))
-            raise Exception("Tooooo much text!")
+        self._txt_img = None  # reset
 
-    def _calc_font_scale(self, msg):
-        return get_best_font_scale(msg, self._font, self._thickness, self._msg_width, self._max_font_scale)
+    def _calc_font_scale(self):
+        lines = [m['msg'] for m in self._msgs]
+        font_scale = get_best_group_font_size(lines, self._font, self._thickness, self._msg_width, self._max_font_scale)
+        self._font_scale = font_scale if font_scale < self._max_font_scale else self._max_font_scale
 
     def clear(self):
         self._msgs = []
+        self._txt_img = None  # reset
 
     def _prune_msgs(self):
         """
         Remove exired messages.
         """
+        l = len(self._msgs)
         self._msgs = [m for m in self._msgs if (m['duration_sec'] == 0 or
                                                 time.time() < m['start'] + m['duration_sec'])]
+        if len(self._msgs) < l:
+            self._txt_img = None  # reset
 
     def annotate_img(self, img):
         """
@@ -117,28 +123,49 @@ class StatusMessages(object):
         self._prune_msgs()
         if len(self._msgs) == 0:
             return
-        msgs_height = np.sum([m['ascend'] + m['descend'] for m in self._msgs])
+
+        if self._txt_img is None:
+            self._render_osd_image()
+
+        if self._bkg_alpha is not None:
+            blend = (1.0 - self._bkg_alpha) * img[self._txt_box['top']:self._txt_box['bottom'],
+                                              self._txt_box['left']:self._txt_box['right'], :] + \
+                    self._bkg_alpha * self._txt_img
+            text_img = np.uint8(blend)
+        else:
+            text_img = self._txt_img
+
+        img[self._txt_box['top']:self._txt_box['bottom'], \
+        self._txt_box['left']:self._txt_box['right'], :3] = text_img
+
+    def _render_osd_image(self):
+        text_dims = []
+        self._calc_font_scale()
+
+        for msg in self._msgs:
+            (width, ascend), descend = cv2.getTextSize(msg['msg'], fontFace=self._font,
+                                                       fontScale=self._font_scale, thickness=self._thickness)
+            text_dims.append({'ascend': ascend,
+                              'descend': descend,
+                              'width': width})
+
+        msgs_height = np.sum([m['ascend'] + m['descend'] for m in text_dims])
         if len(self._msgs) > 1:
             msgs_height += self._spacing * (len(self._msgs) - 1)
+        self._txt_box = {'right': self._img_shape[1] - self._margin_px,
+                         'bottom': self._img_shape[0] - self._margin_px,
+                         'left': self._margin_px,
+                         'top': self._img_shape[0] - self._margin_px * 3 - msgs_height}
 
-        box_right = img.shape[1] - self._margin_px
-        box_bottom = img.shape[0] - self._margin_px
-        box_left = self._margin_px
-        box_top = img.shape[0] - self._margin_px * 3 - msgs_height
-
-        text_img = np.zeros((box_bottom - box_top, box_right - box_left, 3))
+        text_img = np.zeros((self._txt_box['bottom'] - self._txt_box['top'],
+                             self._txt_box['right'] - self._txt_box['left'], 3))
         text_img[:, :, :] = np.array(self._bkg_color).reshape(1, 1, 3)
 
         text_x = self._margin_px
         text_y = self._margin_px
         for l, msg in enumerate(self._msgs):
-            text_y += msg['ascend']
-            cv2.putText(text_img, msg['msg'], (text_x, text_y), self._font, msg['scale'], self._text_color,
+            text_y += text_dims[l]['ascend']
+            cv2.putText(text_img, msg['msg'], (text_x, text_y), self._font, self._font_scale, self._text_color,
                         self._thickness)
-            text_y += msg['descend'] + self._spacing
-
-        if self._bkg_alpha is not None:
-            blend = (1.0 - self._bkg_alpha) * img[box_top:box_bottom, box_left:box_right,
-                                              :] + self._bkg_alpha * text_img
-            text_img = np.uint8(blend)
-        img[box_top:box_bottom, box_left:box_right, :3] = text_img
+            text_y += text_dims[l]['descend'] + self._spacing
+        self._txt_img = text_img
