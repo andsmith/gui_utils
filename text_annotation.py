@@ -5,7 +5,7 @@ Utilities for adding text to images (uses cv2 drawing functions)
 import cv2
 import numpy as np
 import time
-
+import logging
 
 def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
     """
@@ -72,6 +72,7 @@ class StatusMessages(object):
         self._msgs = []
 
     def set_image_shape(self, img_shape):
+        logging.info("Setting status bar for images of shape:  %s" % (img_shape,))
         self._img_shape = img_shape
         self._msg_width = img_shape[1] - self._margin_px * 4
 
