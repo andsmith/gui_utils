@@ -5,7 +5,7 @@ Utilities for adding text to images (uses cv2 drawing functions)
 import cv2
 import numpy as np
 import time
-
+import logging
 
 def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
     """
@@ -53,7 +53,6 @@ class StatusMessages(object):
         self._margin_px = margin_px
         if np.array(img_shape).size > 3:
             raise Exception("img_shape doesn't look like a list of dimensions")
-        self._img_shape = img_shape
         self._text_color = text_color
         self._bkg_color = bkg_color
         self._bkg_alpha = bkg_alpha
@@ -61,15 +60,21 @@ class StatusMessages(object):
         self._font = font
         self._line_type = line_type
         self._max_font_scale = max_font_scale
-        self._img_shape = img_shape
-        self._msg_width = img_shape[1] - margin_px * 4
         self._thickness = 1
+        self._img_shape = None
+        self._msg_width = None
+        self.set_image_shape(img_shape)
 
         # Stuff not recalculated every frame, only when messages change
         self._font_scale = None
         self._txt_img = None
         self._txt_box = None
         self._msgs = []
+
+    def set_image_shape(self, img_shape):
+        logging.info("Setting status bar for images of shape:  %s" % (img_shape,))
+        self._img_shape = img_shape
+        self._msg_width = img_shape[1] - self._margin_px * 4
 
     def add_msgs(self, msgs, name, *args, **kwargs):
         for i, msg in enumerate(msgs):
@@ -119,6 +124,9 @@ class StatusMessages(object):
         Add all currently active messages to the bottom of the image
         :param img:  HxWx3 numpy array
         """
+        if img.shape[:2]!=self._img_shape[:2]:
+            raise Exception("StatusMessages() created to annotate images of shape:  %s, but image has shape %s" % (
+                self._img_shape, img.shape))
 
         self._prune_msgs()
         if len(self._msgs) == 0:
