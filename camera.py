@@ -26,7 +26,7 @@ class ShutdownException(Exception):
 class Camera(object):
     _PROPS = get_cv2_prop_names()
 
-    def __init__(self, cam_ind, callback, settings=None, prompt_resolution=False):
+    def __init__(self, cam_ind, callback, settings=None, prompt_resolution=False, mirror=True):
         """
         Webcam wrapper.  If user is asked for resolution, don't return until then.
 
@@ -40,6 +40,7 @@ class Camera(object):
         self._prompt_resolution = prompt_resolution
         self._cam_ind = cam_ind
         self._shutdown = False
+        self._mirror = mirror
         self._started = False
         self._is_windows = os.name == 'nt'
         self._cam_thread = Thread(target=self._cam_thread_proc)
@@ -146,7 +147,11 @@ class Camera(object):
                 logging.warning("Camera not getting data, sleeping for a bit...")
                 time.sleep(.1)
                 continue
-            frame = np.ascontiguousarray(frame)  # mirror image, not real image
+
+            if self._mirror:
+                frame = np.ascontiguousarray(frame[:, ::-1, :])
+            else:
+                frame = np.ascontiguousarray(frame)  # mirror image, not real image
             self._callback(frame, frame_time)
 
         logging.info("Camera:  releasing device...")
