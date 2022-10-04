@@ -126,7 +126,10 @@ class Camera(object):
             self._apply_settings(cam)
         self._resolution = tuple(np.int64([cam.get(cv2.CAP_PROP_FRAME_WIDTH),
                                            cam.get(cv2.CAP_PROP_FRAME_HEIGHT)]))
-        logging.info("...resolution:   %s x %s" % (self._resolution[0], self._resolution[1]))
+        logging.info("\tresolution:   %s x %s" % (self._resolution[0], self._resolution[1]))
+        fps = cam.get(cv2.CAP_PROP_FPS)
+        logging.info("\tFPS:  %s" % (fps,))
+
         return cam
 
     def _cam_thread_proc(self, ):
