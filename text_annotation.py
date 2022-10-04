@@ -7,6 +7,7 @@ import numpy as np
 import time
 import logging
 
+
 def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
     """
     Find the maximum font scale that fits text in given width.
@@ -38,7 +39,7 @@ class StatusMessages(object):
 
     def __init__(self, img_shape, text_color, bkg_color, font=cv2.FONT_HERSHEY_SIMPLEX, bkg_alpha=0.6,
                  line_type=cv2.LINE_AA,
-                 margin_px=10, max_font_scale=4, spacing=0):
+                 outside_margins=(40, 40), inside_margins=(10,10), max_font_scale=4, spacing=0):
         """
         :param img_shape:  lines will be added to images of this shape
         :param text_color:  rgb tuple in 0, 255
@@ -46,11 +47,13 @@ class StatusMessages(object):
         :param font: cv2 font
         :param bkg_alpha: blend background into image float in (0, 1), or NONE for opaque (faster)
         :param line_type: cv2 line type, for text drawing
-        :param margin_px: leave border between text and box, and box and image boundary (pixels)
+        :param outside_margins: 2-tuple, pixels outside of box (horiz, vert)
+        :param inside_margins: 2-tuple, pixels between box and text (horiz, vert)
         :param max_font_scale:  float
         :param spacing:  Pixels between lines of text
         """
-        self._margin_px = margin_px
+        self._o_margins = outside_margins
+        self._i_margins = inside_margins
         if np.array(img_shape).size > 3:
             raise Exception("img_shape doesn't look like a list of dimensions")
         self._text_color = text_color
@@ -74,7 +77,7 @@ class StatusMessages(object):
     def set_image_shape(self, img_shape):
         logging.info("Setting status bar for images of shape:  %s" % (img_shape,))
         self._img_shape = img_shape
-        self._msg_width = img_shape[1] - self._margin_px * 4
+        self._msg_width = img_shape[1] - self._o_margins[0] * 2 - self._i_margins[1] * 2
 
     def add_msgs(self, msgs, name, *args, **kwargs):
         for i, msg in enumerate(msgs):
@@ -124,7 +127,7 @@ class StatusMessages(object):
         Add all currently active messages to the bottom of the image
         :param img:  HxWx3 numpy array
         """
-        if img.shape[:2]!=self._img_shape[:2]:
+        if img.shape[:2] != self._img_shape[:2]:
             raise Exception("StatusMessages() created to annotate images of shape:  %s, but image has shape %s" % (
                 self._img_shape, img.shape))
 
@@ -143,8 +146,7 @@ class StatusMessages(object):
         else:
             text_img = self._txt_img
 
-        img[self._txt_box['top']:self._txt_box['bottom'], \
-        self._txt_box['left']:self._txt_box['right'], :3] = text_img
+        img[self._txt_box['top']:self._txt_box['bottom'], self._txt_box['left']:self._txt_box['right'], :3] = text_img
 
     def _render_osd_image(self):
         text_dims = []
@@ -160,21 +162,21 @@ class StatusMessages(object):
         msgs_height = np.sum([m['ascend'] + m['descend'] for m in text_dims])
         if len(self._msgs) > 1:
             msgs_height += self._spacing * (len(self._msgs) - 1)
-        self._txt_box = {'right': self._img_shape[1] - self._margin_px,
-                         'bottom': self._img_shape[0] - self._margin_px,
-                         'left': self._margin_px,
-                         'top': self._img_shape[0] - self._margin_px * 3 - msgs_height}
+        self._txt_box = {'right': self._img_shape[1] - self._o_margins[0],
+                         'bottom': self._img_shape[0] - self._o_margins[1],
+                         'left': self._o_margins[0],
+                         'top': self._img_shape[0] - self._o_margins[1] - self._i_margins[1]* 2  - msgs_height}
 
         text_img = np.zeros((self._txt_box['bottom'] - self._txt_box['top'],
                              self._txt_box['right'] - self._txt_box['left'], 3))
         text_img[:, :, :] = np.array(self._bkg_color).reshape(1, 1, 3)
 
-        text_x = self._margin_px
-        text_y = self._margin_px
+        text_x = self._i_margins[0]
+        text_y = self._i_margins[1]
+
         for l, msg in enumerate(self._msgs):
             text_y += text_dims[l]['ascend']
             cv2.putText(text_img, msg['msg'], (text_x, text_y), self._font, self._font_scale, self._text_color,
                         self._thickness)
             text_y += text_dims[l]['descend'] + self._spacing
         self._txt_img = text_img
-
