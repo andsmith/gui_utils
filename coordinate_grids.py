@@ -171,7 +171,7 @@ class CartesianGrid(Grid):
             _draw_rect(image, x_right, y_px, tick_length, tick_thickness, tick_color)
             # labels
             y_label = int(y_px + self._tick_text_sizes[1][y_i][0][1] / 2)
-            cv2.putText(image, "%g" % y_grid, (x_label, y_label), self._props['font'],
+            cv2.putText(image, "%.3g" % y_grid, (x_label, y_label), self._props['font'],
                         self._props['font_scale'], tick_color, 1, cv2.LINE_AA)
 
         # horizontal ticks
@@ -187,7 +187,7 @@ class CartesianGrid(Grid):
             # labels
             x_label = int(x_px - self._tick_text_sizes[0][x_i][0][0] / 2)
 
-            cv2.putText(image, "%g" % x_grid, (x_label, y_label), self._props['font'],
+            cv2.putText(image, "%.3g" % x_grid, (x_label, y_label), self._props['font'],
                         self._props['font_scale'], tick_color, 1, cv2.LINE_AA)
 
     def _calc_ticks(self):
@@ -204,14 +204,19 @@ def _draw_rect(image, left, top, width, height, color):
 
 
 def grid_sandbox():
-    blank = np.zeros((700, 1000, 4), np.uint8)
-    blank[:, :, 3] = 255
-    bbox = {'top': 10, 'bottom': 690, 'left': 10, 'right': 990}
+    blank = np.zeros((500, 500, 4), np.uint8)
+    bbox = {'top': 0, 'bottom': blank.shape[0], 'left': 0, 'right': blank.shape[1]}
     grid = CartesianGrid(bbox)
     window_name = "Grid sandbox"
 
     def _mouse(event, x, y, flags, param):
         grid.mouse(event, x, y, flags, param)
+        if event==cv2.EVENT_MOUSEMOVE:
+            print("User moved to coordinate:  %s"% (grid.get_values()))
+        elif event==cv2.EVENT_LBUTTONDOWN:
+            print("User clicked at coordinate:  %s"% (grid.get_values()))
+        elif event==cv2.EVENT_LBUTTONUP:
+            print("User un-clicked at coordinate:  %s"% (grid.get_values()))
 
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
     cv2.setMouseCallback(window_name, _mouse)
@@ -234,7 +239,7 @@ def grid_sandbox():
         draw_times.append(dt)
         frame_count += 1
 
-        if frame_count % 100 == 0:
+        if frame_count % 1000 == 0:
             print("Mean draw time:  %.6f sec (sd. %.6f sec)." % (np.mean(draw_times), np.std(draw_times),))
             frame_count = 0
 

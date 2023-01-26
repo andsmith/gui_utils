@@ -13,3 +13,9 @@
 * `gui_picker.py` - Dialog box for choosing an item from a list
 Camera component for projects
 * `gui_icon_overlay.py` - Overlay icon(s) with interativity on a video stream
+
+
+### screenshot
+![demo in coordinate_grids.py](https://github.com/andsmith/gui_utils/blob/main/coordinate_grids.png)
+
+
