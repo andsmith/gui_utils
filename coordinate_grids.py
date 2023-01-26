@@ -55,6 +55,7 @@ class Grid(metaclass=ABCMeta):
         self._props.update({} if draw_props is None else draw_props)
 
         self._param_ranges = np.array(param_ranges)
+
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
 
         self._calc_ticks()
@@ -170,7 +171,7 @@ class CartesianGrid(Grid):
             _draw_rect(image, x_right, y_px, tick_length, tick_thickness, tick_color)
             # labels
             y_label = int(y_px + self._tick_text_sizes[1][y_i][0][1] / 2)
-            cv2.putText(image, "%.2g" % y_grid, (x_label, y_label), self._props['font'],
+            cv2.putText(image, "%g" % y_grid, (x_label, y_label), self._props['font'],
                         self._props['font_scale'], tick_color, 1, cv2.LINE_AA)
 
         # horizontal ticks
@@ -186,7 +187,7 @@ class CartesianGrid(Grid):
             # labels
             x_label = int(x_px - self._tick_text_sizes[0][x_i][0][0] / 2)
 
-            cv2.putText(image, "%.2g" % x_grid, (x_label, y_label), self._props['font'],
+            cv2.putText(image, "%g" % x_grid, (x_label, y_label), self._props['font'],
                         self._props['font_scale'], tick_color, 1, cv2.LINE_AA)
 
     def _calc_ticks(self):
