@@ -1,5 +1,5 @@
 """
-Interactive coordinate grids, i.e. cartesian  (log, polar?)
+Interactive coordinate grids, i.e. cartesian, log/log, polar etc.
 For continuous 2-d user input control, etc.
 """
 import logging
@@ -7,7 +7,6 @@ import cv2
 import time
 import numpy as np
 from abc import abstractmethod, ABCMeta
-from .drawing import draw_rect, draw_box
 
 RGB_COLORS = {'white': (255, 255, 255),
               'light_gray': (184, 184, 184),
@@ -41,8 +40,7 @@ class Grid(metaclass=ABCMeta):
                {'range_up': '0',  # param 0 adjust
                 'range_down': 'p'}]
 
-    def __init__(self, bbox, param_ranges=((0., 1.), (0., 1.)), init_values=(None, None), colors=None, draw_props=None,
-                 expansion_speed=1.33):
+    def __init__(self, bbox, param_ranges=((0., 1.), (0., 1.)), colors=None, draw_props=None, expansion_speed=1.33):
         """
         Initialize a new grid.
         :param bbox: dict with 'top','bottom','left','right', where in image is the grid region
@@ -58,15 +56,16 @@ class Grid(metaclass=ABCMeta):
 
         self._param_ranges = np.array(param_ranges)
 
+        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+
         self._calc_ticks()
 
+        self._param_values = None, None
         self._bbox = bbox
         self._x = expansion_speed
+        self._mouse_pos = None
         self._image_offset = np.array([self._bbox['left'], self._bbox['top']])
         self._size = np.array([bbox['right'] - bbox['left'], bbox['bottom'] - bbox['top']])
-
-        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
-        self._mouse_pos = self.grid_coords_to_pixels(init_values)
 
         self._colors = Grid.DEFAULT_COLORS.copy()
         self._colors.update({} if colors is None else colors)
@@ -99,21 +98,12 @@ class Grid(metaclass=ABCMeta):
         pass
 
     def get_values(self):
-        if self._mouse_pos is None:
-            return None, None
         return self.pixel_to_grid_coords(self._mouse_pos)
 
     @abstractmethod
     def pixel_to_grid_coords(self, xy_pos):
         """
         Given the grid image coordinates, what is the grid position.
-        """
-        pass
-
-    @abstractmethod
-    def grid_coords_to_pixels(self, xy):
-        """
-        Given the grid  coords, what are the image coords
         """
         pass
 
@@ -129,20 +119,24 @@ class Grid(metaclass=ABCMeta):
             return
         x_px, y_px = self._mouse_pos
         l = int(self._props['crosshair_length'] / 2)
-        draw_rect(image, x_px, y_px - l, 1, l * 2, self._colors['heavy'])
-        draw_rect(image, x_px - l, y_px, l * 2, 1, self._colors['heavy'])
+        _draw_rect(image, x_px, y_px - l, 1, l * 2, self._colors['heavy'])
+        _draw_rect(image, x_px - l, y_px, l * 2, 1, self._colors['heavy'])
 
     def _draw_base_image(self, image):
         """
         helper to draw common elements
         """
         # background
-        draw_rect(image, self._bbox['left'], self._bbox['top'],
-                  self._size[0], self._size[1],
-                  self._colors['bkg'])
+        _draw_rect(image, self._bbox['left'], self._bbox['top'],
+                   self._size[0], self._size[1],
+                   self._colors['bkg'])
         # box
         if self._props['draw_bounding_box']:
-            draw_box(image, self._bbox, thickness=self._props['line_thicknesses']['medium'], color=self._colors['heavy'])
+            t = self._props['line_thicknesses']['medium']
+            _draw_rect(image, self._bbox['left'], self._bbox['top'], self._size[0], t, self._colors['heavy'])
+            _draw_rect(image, self._bbox['left'], self._bbox['bottom'] - t, self._size[0], t, self._colors['heavy'])
+            _draw_rect(image, self._bbox['right'] - t, self._bbox['top'], t, self._size[1], self._colors['heavy'])
+            _draw_rect(image, self._bbox['left'], self._bbox['top'], t, self._size[1], self._colors['heavy'])
 
 
 class CartesianGrid(Grid):
@@ -152,13 +146,8 @@ class CartesianGrid(Grid):
     def pixel_to_grid_coords(self, xy_pos):
         pos_rel = (np.array(xy_pos) - self._image_offset) / self._size
         pos_rel[1] = 1.0 - pos_rel[1]  # flip y
-
-        return pos_rel * self._param_spans + self._param_ranges[:, 0]
-
-    def grid_coords_to_pixels(self, xy):
-        pos_rel = (np.array(xy) - self._param_ranges[:, 0].reshape(-1)) / self._param_spans
-        pos_rel[1] = 1.0 - pos_rel[1]  # flip y
-        return (pos_rel * self._size + self._image_offset).astype(np.int64)
+        param_range_lengths = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+        return pos_rel * param_range_lengths + self._param_ranges[:, 0]
 
     def draw(self, image):
         """
@@ -178,11 +167,11 @@ class CartesianGrid(Grid):
         for y_i, y_grid in enumerate(self._param_ticks[1]):
             y_rel = 1 - (y_grid - self._param_ranges[1][0]) / self._param_spans[1]
             y_px = int((y_rel * self._size[1]) + self._bbox['top'])
-            draw_rect(image, x_left, y_px, tick_length, tick_thickness, tick_color)
-            draw_rect(image, x_right, y_px, tick_length, tick_thickness, tick_color)
+            _draw_rect(image, x_left, y_px, tick_length, tick_thickness, tick_color)
+            _draw_rect(image, x_right, y_px, tick_length, tick_thickness, tick_color)
             # labels
             y_label = int(y_px + self._tick_text_sizes[1][y_i][0][1] / 2)
-            cv2.putText(image, "%g" % y_grid, (x_label, y_label), self._props['font'],
+            cv2.putText(image, "%.3g" % y_grid, (x_label, y_label), self._props['font'],
                         self._props['font_scale'], tick_color, 1, cv2.LINE_AA)
 
         # horizontal ticks
@@ -193,12 +182,12 @@ class CartesianGrid(Grid):
         for x_i, x_grid in enumerate(self._param_ticks[0]):
             x_rel = (x_grid - self._param_ranges[0][0]) / self._param_spans[0]
             x_px = int((x_rel * self._size[0]) + self._bbox['left'])
-            draw_rect(image, x_px, y_top, tick_thickness, tick_length, tick_color)
-            draw_rect(image, x_px, y_bottom, tick_thickness, tick_length, tick_color)
+            _draw_rect(image, x_px, y_top, tick_thickness, tick_length, tick_color)
+            _draw_rect(image, x_px, y_bottom, tick_thickness, tick_length, tick_color)
             # labels
             x_label = int(x_px - self._tick_text_sizes[0][x_i][0][0] / 2)
 
-            cv2.putText(image, "%g" % x_grid, (x_label, y_label), self._props['font'],
+            cv2.putText(image, "%.3g" % x_grid, (x_label, y_label), self._props['font'],
                         self._props['font_scale'], tick_color, 1, cv2.LINE_AA)
 
     def _calc_ticks(self):
@@ -210,15 +199,24 @@ class CartesianGrid(Grid):
                                   for tick_value in ticks] for ticks in self._param_ticks]
 
 
+def _draw_rect(image, left, top, width, height, color):
+    image[top:top + height, left:left + width] = color
+
+
 def grid_sandbox():
-    blank = np.zeros((700, 1000, 4), np.uint8)
-    blank[:, :, 3] = 255
-    bbox = {'top': 10, 'bottom': 690, 'left': 10, 'right': 990}
+    blank = np.zeros((500, 500, 4), np.uint8)
+    bbox = {'top': 0, 'bottom': blank.shape[0], 'left': 0, 'right': blank.shape[1]}
     grid = CartesianGrid(bbox)
     window_name = "Grid sandbox"
 
     def _mouse(event, x, y, flags, param):
         grid.mouse(event, x, y, flags, param)
+        if event==cv2.EVENT_MOUSEMOVE:
+            print("User moved to coordinate:  %s"% (grid.get_values()))
+        elif event==cv2.EVENT_LBUTTONDOWN:
+            print("User clicked at coordinate:  %s"% (grid.get_values()))
+        elif event==cv2.EVENT_LBUTTONUP:
+            print("User un-clicked at coordinate:  %s"% (grid.get_values()))
 
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
     cv2.setMouseCallback(window_name, _mouse)
@@ -241,7 +239,7 @@ def grid_sandbox():
         draw_times.append(dt)
         frame_count += 1
 
-        if frame_count % 100 == 0:
+        if frame_count % 1000 == 0:
             print("Mean draw time:  %.6f sec (sd. %.6f sec)." % (np.mean(draw_times), np.std(draw_times),))
             frame_count = 0
 
