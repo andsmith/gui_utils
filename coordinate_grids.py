@@ -49,7 +49,7 @@ class Grid(metaclass=ABCMeta):
                 'range_down': 'p'}]
 
     def __init__(self, bbox, param_ranges=((0., 1.), (0., 1.)), init_values=(None, None), colors=None, draw_props=None,
-                 expansion_speed=1.1, title=None, axis_labels=('x', 'y')):
+                 expansion_speed=1.1, title=None, axis_labels=('x', 'y'), minor_ticks=True, minor_unlabeled_ticks=True):
         """
         Initialize a new grid.
         :param bbox: dict with 'top','bottom','left','right', where in image is the grid region
@@ -66,7 +66,7 @@ class Grid(metaclass=ABCMeta):
         self._title = title
         self._axis_labels = axis_labels
         self._param_ranges = np.array(param_ranges)
-
+        self._minors, self._minors_unlabeled = minor_ticks, minor_unlabeled_ticks
         self._bbox = bbox
         self._image_offset = np.array([self._bbox['left'], self._bbox['top']])
         self._size = np.array([bbox['right'] - bbox['left'], bbox['bottom'] - bbox['top']])
@@ -251,7 +251,7 @@ class CartesianGrid(Grid):
                 draw_rect(image, color=color, **tick['draw_args_b'])
                 if tick['string'] is not None:
                     cv2.putText(image, tick['string'], tick['text_xy'],
-                                self._props['font'], tick_font_scale,color, 1, cv2.LINE_AA)
+                                self._props['font'], tick_font_scale, color, 1, cv2.LINE_AA)
 
         for axis in (0, 1):
             _draw_ticks(self._param_ticks[axis]['major'])
@@ -289,12 +289,14 @@ class CartesianGrid(Grid):
             2. spanning whole range, but not too close to edges
         """
 
-        margin_frac = 0.1
+        high_margin_frac = 0.1  # don't put tics within this fraction of the high end of the range
+        low_margin_frac = 0.01  # don't put tics within this fraction of zero
 
         # calc  step size, at least 10 ticks of minor order
         def _calc(low, high, is_vertical):
             span = high - low
-            margin = margin_frac * span
+            margin = {'high': (high_margin_frac * span),
+                      'low': (low_margin_frac * span)}
             span_order = np.log10(span)
 
             major_order = np.floor(span_order)
@@ -314,17 +316,26 @@ class CartesianGrid(Grid):
             major_tick_locs = major_tick_start + np.arange(0, n_major) * major_step
             unlabeled_minor_tick_locs = unlabeled_minor_tick_start + np.arange(0, n_minor) * minor_step
             labeled_minor_tick_locs = labeled_minor_tick_start + np.arange(0, n_major + 1) * major_step
+            if not self._minors:
+                labeled_minor_tick_locs=[]
 
-            unlabeled_minor_ticks = [m for m in unlabeled_minor_tick_locs
-                                     if m not in major_tick_locs and m not in labeled_minor_tick_locs]
+            unlabeled_minor_tick_locs = [m for m in unlabeled_minor_tick_locs
+                                         if m not in major_tick_locs and m not in labeled_minor_tick_locs]
 
             tick_thickness = self._props['line_thicknesses']['thin']
 
             def _get_text_and_sizes(value, tick_length, color, labeled=True):
-                string = self._props['tick_string'] % (value,) if labeled else None
-                size = cv2.getTextSize(string, self._props['font'],
-                                       self._props['tick_font_scale'],
-                                       thickness=1) if labeled else None
+                if labeled:
+                    string = self._props['tick_string'] % (value,)
+                    size = cv2.getTextSize(string, self._props['font'],
+                                           self._props['tick_font_scale'],
+                                           thickness=1) if labeled else None
+                else:
+                    string =None
+                    size = (0,0),0
+                # for text positions
+                y_bottom = self._bbox['bottom'] - tick_length - 4 - size[1]
+                x_left = self._bbox['left'] + tick_length + 4
 
                 if is_vertical:
                     # drawing on left & right, writing on left
@@ -334,7 +345,7 @@ class CartesianGrid(Grid):
                                    'top': y, 'height': tick_thickness}
                     draw_args_b = {'left': self._bbox['right'] - tick_length, 'width': tick_length,
                                    'top': y, 'height': tick_thickness}
-                    text_xy = self._bbox['left'] + tick_length + 4, int(size[0][1] / 2) if string is not None else None
+                    text_xy = x_left, y + int(size[0][1] / 2) if string is not None else None
                 else:
                     # drawing on top & bottom, writing on bottom
                     x_rel = (value - self._param_ranges[0][0]) / self._param_spans[0]
@@ -343,25 +354,29 @@ class CartesianGrid(Grid):
                                    'top': self._bbox['top'], 'height': tick_length}
                     draw_args_b = {'left': x, 'width': tick_thickness,
                                    'top': self._bbox['bottom'] - tick_length, 'height': tick_length}
-                    text_xy = self._bbox['left'] + tick_length + 4, int(size[0][1] / 2) if string is not None else None
+                    text_xy = x - int(size[0][0] / 2), y_bottom if string is not None else None
 
-                return {'text_xy': text_xy,
+                return {'value': value,
+                        'text_xy': text_xy,
                         'draw_args_a': draw_args_a,
                         'draw_args_b': draw_args_b,
                         'string': string,
                         'size': size,
-                                   'color': color}
+                        'color': color}
 
             def _in_range(value):
-                return low <= value <= high - margin
+                return low + margin['low'] <= value <= high - margin['high']
 
             major_labels = [_get_text_and_sizes(tick_value, self._props['tick_length'], self._colors['heavy'], True)
                             for tick_value in major_tick_locs if _in_range(tick_value)]
-            minor_labels = [_get_text_and_sizes(tick_value, self._props['tick_length'], self._colors['light'], True)
-                            for tick_value in labeled_minor_tick_locs if _in_range(tick_value)]
-            unlabeled_minor_ticks = [_get_text_and_sizes(tick_value, self._props['tick_length'], self._colors['light'],
-                                                         True)
-                                     for tick_value in unlabeled_minor_tick_locs if _in_range(tick_value)]
+            minor_labels = [
+                _get_text_and_sizes(tick_value, int(self._props['tick_length'] / 2.), self._colors['light'], True)
+                for tick_value in labeled_minor_tick_locs if _in_range(tick_value)] if self._minors else []
+            unlabeled_minor_ticks = [_get_text_and_sizes(tick_value,
+                                                         int(self._props['tick_length']/ 4) ,
+                                                         self._colors['light'],
+                                                         False)
+                                     for tick_value in unlabeled_minor_tick_locs if _in_range(tick_value)] if self._minors_unlabeled else []
 
             return {'major': major_labels,
                     'minor_labeled': minor_labels,
@@ -370,13 +385,12 @@ class CartesianGrid(Grid):
         self._param_ticks = [_calc(p_range[0], p_range[1], vert)
                              for p_range, vert in zip(self._param_ranges, (False, True))]
 
+
 def grid_sandbox():
     blank = np.zeros((700, 1000, 4), np.uint8)
     blank[:, :, 3] = 255
-    bbox = {'top': 140, 'bottom': 690, 'left': 10, 'right': 990}
-    import ipdb;
-    ipdb.set_trace()
-    grid = CartesianGrid(bbox, title='Grid')
+    bbox = {'top': 10, 'bottom': 690, 'left': 10, 'right': 990}
+    grid = CartesianGrid(bbox, param_ranges=((0.0, 1.5), (0.0, 78.3567456735)), title='Grid')
     window_name = "Grid sandbox"
 
     def _mouse(event, x, y, flags, param):
@@ -405,6 +419,7 @@ def grid_sandbox():
         if frame_count % 100 == 0:
             print("Mean draw time:  %.6f sec (sd. %.6f sec)." % (np.mean(draw_times), np.std(draw_times),))
             frame_count = 0
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
