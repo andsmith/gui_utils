@@ -1,6 +1,10 @@
 import numpy as np
 
 
+def blend_colors(color, bkg, alpha):
+    return np.uint8(np.array(color) * alpha + np.array(bkg) * (1. - alpha))
+
+
 def draw_rect(image, left, top, width, height, color):
     image[top:top + height, left:left + width] = color
 

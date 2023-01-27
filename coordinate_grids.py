@@ -145,15 +145,15 @@ class Grid(metaclass=ABCMeta):
     def _set_title_positions(self):
         title = self._title if self._title is not None else ""
         (width, height), baseline = cv2.getTextSize(title,
-                                                    self._props['font'],
+                                                    self._props['title_font'],
                                                     self._props['title_font_scale'],
-                                                    thickness=1)
+                                                    thickness=self._props['title_thickness'])
         self._title_text_pos = int(self._bbox['left'] + self._size[0] / 2 - width / 2), \
                                int(self._bbox['top'] + self._size[1] / 2 + height / 2)
 
     def _draw_title(self, image):
         if self._title is not None:
-            cv2.putText(image, self._title, self._title_text_pos, self._props['font'], self._props['title_font_scale'],
+            cv2.putText(image, self._title, self._title_text_pos, self._props['title_font'], self._props['title_font_scale'],
                         self._colors['title'], self._props['title_thickness'], cv2.LINE_AA)
 
     def draw_cursor(self, image):
@@ -370,10 +370,10 @@ class CartesianGrid(Grid):
             major_labels = [_get_text_and_sizes(tick_value, self._props['tick_length'], self._colors['heavy'], True)
                             for tick_value in major_tick_locs if _in_range(tick_value)]
             minor_labels = [
-                _get_text_and_sizes(tick_value, int(self._props['tick_length'] / 2.), self._colors['light'], True)
+                _get_text_and_sizes(tick_value, int(self._props['tick_length'] *2./ 3.), self._colors['light'], True)
                 for tick_value in labeled_minor_tick_locs if _in_range(tick_value)] if self._minors else []
             unlabeled_minor_ticks = [_get_text_and_sizes(tick_value,
-                                                         int(self._props['tick_length']/ 4) ,
+                                                         int(self._props['tick_length']/ 3.) ,
                                                          self._colors['light'],
                                                          False)
                                      for tick_value in unlabeled_minor_tick_locs if _in_range(tick_value)] if self._minors_unlabeled else []
