@@ -43,13 +43,14 @@ class Grid(metaclass=ABCMeta):
                            'title': _rgb_to_bgra(RGB_COLORS['gray'], 255), }
     TITLE_OPACITY = 0.33
 
-    HOTKEYS = [{'range_up': ']',  # param 1 adjust
-                'range_down': '['},
-               {'range_up': '0',  # param 0 adjust
-                'range_down': 'p'}]
+    HOTKEYS = [{'range_up': [ord(']')],  # param 1 adjust
+                'range_down': [ord('[')]},
+               {'range_up': [ord('0'), ord('o')],  # param 0 adjust ('o' just in case')
+                'range_down': [ord('p')]}]
 
     def __init__(self, bbox, param_ranges=((0., 1.), (0., 1.)), init_values=(None, None), colors=None, draw_props=None,
-                 expansion_speed=1.1, title=None, axis_labels=('x', 'y'), minor_ticks=True, minor_unlabeled_ticks=True):
+                 expansion_speed=1.1, title=None, axis_labels=('x', 'y'), minor_ticks=True, minor_unlabeled_ticks=True,
+                 adjustability=(True, True)):
         """
         Initialize a new grid.
         :param bbox: dict with 'top','bottom','left','right', where in image is the grid region
@@ -57,9 +58,10 @@ class Grid(metaclass=ABCMeta):
         :param colors:  Dict with RGB or RGBA values, {'heavy','light','bkg','title'}
         :param draw_props:  dict with info for drawing (see DEFAULT_DRAW_PROPS)
         :param expansion_speed:  How fast to grow/shrink when user wants to reshape grid
+        :param adjustability: (horizontal, vertical)
         """
         self._title = None
-
+        self._adj = adjustability
         # use defaults where not specified
         self._props = Grid.DEFAULT_DRAW_PROPS.copy()
         self._props.update({} if draw_props is None else draw_props)
@@ -93,11 +95,13 @@ class Grid(metaclass=ABCMeta):
 
         # check for range adjustments
         for param_i, hotkey in enumerate(Grid.HOTKEYS):
-            if k & 0xff == ord(hotkey['range_up']):
+            if not self._adj[param_i]:
+                continue
+            if k & 0xff in hotkey['range_up']:
                 self._param_ranges[param_i] *= self._x
                 self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
                 self._calc_ticks()
-            elif k & 0xff == ord(hotkey['range_down']):
+            elif k & 0xff in hotkey['range_down']:
                 self._param_ranges[param_i] /= self._x
                 self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
                 self._calc_ticks()
@@ -149,11 +153,12 @@ class Grid(metaclass=ABCMeta):
                                                     self._props['title_font_scale'],
                                                     thickness=self._props['title_thickness'])
         self._title_text_pos = int(self._bbox['left'] + self._size[0] / 2 - width / 2), \
-                               int(self._bbox['top'] + self._size[1] / 2 + height / 2)
+                               int(self._bbox['top'] + height * 2)
 
     def _draw_title(self, image):
         if self._title is not None:
-            cv2.putText(image, self._title, self._title_text_pos, self._props['title_font'], self._props['title_font_scale'],
+            cv2.putText(image, self._title, self._title_text_pos, self._props['title_font'],
+                        self._props['title_font_scale'],
                         self._colors['title'], self._props['title_thickness'], cv2.LINE_AA)
 
     def draw_cursor(self, image):
@@ -263,7 +268,7 @@ class CartesianGrid(Grid):
 
     def _get_axis_label_positions(self):
         # H-axis
-        h_indent = 20
+        h_indent = 40
         label = self._axis_labels[0] if self._axis_labels is not None and self._axis_labels[0] is not None else ""
         (width, height), baseline = cv2.getTextSize(label,
                                                     self._props['font'],
@@ -273,13 +278,14 @@ class CartesianGrid(Grid):
                       int(self._bbox['bottom'] - baseline * 1.5)
         # V-axis
         h_indent = 10
+        v_indent = 20
         label = self._axis_labels[1] if self._axis_labels is not None and self._axis_labels[1] is not None else ""
         (width, height), baseline = cv2.getTextSize(label,
                                                     self._props['font'],
                                                     self._props['axis_font_scale'],
                                                     thickness=1)
         v_label_pos = int(self._bbox['left'] + h_indent), \
-                      int(self._bbox['top'] + height + baseline)
+                      int(self._bbox['top'] + height + baseline + v_indent)
         return h_label_pos, v_label_pos
 
     def _calc_ticks(self):
@@ -317,7 +323,7 @@ class CartesianGrid(Grid):
             unlabeled_minor_tick_locs = unlabeled_minor_tick_start + np.arange(0, n_minor) * minor_step
             labeled_minor_tick_locs = labeled_minor_tick_start + np.arange(0, n_major + 1) * major_step
             if not self._minors:
-                labeled_minor_tick_locs=[]
+                labeled_minor_tick_locs = []
 
             unlabeled_minor_tick_locs = [m for m in unlabeled_minor_tick_locs
                                          if m not in major_tick_locs and m not in labeled_minor_tick_locs]
@@ -331,8 +337,8 @@ class CartesianGrid(Grid):
                                            self._props['tick_font_scale'],
                                            thickness=1) if labeled else None
                 else:
-                    string =None
-                    size = (0,0),0
+                    string = None
+                    size = (0, 0), 0
                 # for text positions
                 y_bottom = self._bbox['bottom'] - tick_length - 4 - size[1]
                 x_left = self._bbox['left'] + tick_length + 4
@@ -370,13 +376,14 @@ class CartesianGrid(Grid):
             major_labels = [_get_text_and_sizes(tick_value, self._props['tick_length'], self._colors['heavy'], True)
                             for tick_value in major_tick_locs if _in_range(tick_value)]
             minor_labels = [
-                _get_text_and_sizes(tick_value, int(self._props['tick_length'] *2./ 3.), self._colors['light'], True)
+                _get_text_and_sizes(tick_value, int(self._props['tick_length'] * 2. / 3.), self._colors['light'], True)
                 for tick_value in labeled_minor_tick_locs if _in_range(tick_value)] if self._minors else []
             unlabeled_minor_ticks = [_get_text_and_sizes(tick_value,
-                                                         int(self._props['tick_length']/ 3.) ,
+                                                         int(self._props['tick_length'] / 3.),
                                                          self._colors['light'],
                                                          False)
-                                     for tick_value in unlabeled_minor_tick_locs if _in_range(tick_value)] if self._minors_unlabeled else []
+                                     for tick_value in unlabeled_minor_tick_locs if
+                                     _in_range(tick_value)] if self._minors_unlabeled else []
 
             return {'major': major_labels,
                     'minor_labeled': minor_labels,
@@ -388,13 +395,16 @@ class CartesianGrid(Grid):
 
 def grid_sandbox():
     blank = np.zeros((700, 1000, 4), np.uint8)
-    blank[:, :, 3] = 255
-    bbox = {'top': 10, 'bottom': 690, 'left': 10, 'right': 990}
+    bbox = {'top': 10, 'bottom': blank.shape[0] - 10, 'left': 10, 'right': blank.shape[1] - 10}
     grid = CartesianGrid(bbox, param_ranges=((0.0, 1.5), (0.0, 78.3567456735)), title='Grid')
     window_name = "Grid sandbox"
 
     def _mouse(event, x, y, flags, param):
         grid.mouse(event, x, y, flags, param)
+        if event == cv2.EVENT_LBUTTONDOWN:
+            print("Click:  %s" % (grid.get_values(),))
+        elif event == cv2.EVENT_LBUTTONUP:
+            print("Un-slick:  %s" % (grid.get_values(),))
 
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
     cv2.setMouseCallback(window_name, _mouse)
