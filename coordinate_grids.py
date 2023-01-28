@@ -35,7 +35,7 @@ class Grid(metaclass=ABCMeta):
                           'cursor_string': "(%.2f, %.2f)",
                           'crosshair_length': 20,
                           'tick_length': 20,
-                          'show_ticks':(True, True)}
+                          'show_ticks': (True, True)}
 
     DEFAULT_COLORS_BGRA = {'bkg': _rgb_to_bgra(RGB_COLORS['dark_gray'], 255),
                            'heavy': _rgb_to_bgra(RGB_COLORS['white'], 255),
@@ -109,13 +109,23 @@ class Grid(metaclass=ABCMeta):
                 rv = self._param_ranges
         return rv
 
-    def set_param_range(self, max_val, param_ind):
+    def set_param_max(self, max_val, param_ind):
         """
         TODO: Generalize for N params?  For negative?
         """
         if max_val <= self._param_ranges[param_ind, 0]:
             raise Exception("Tried to set param max below param min.")
         self._param_ranges[param_ind][1] = max_val
+        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+        self._calc_ticks()
+
+    def set_param_range(self, range, param_ind):
+        """
+        TODO: Generalize for N params?  For negative?
+        """
+        if range[1] <= range[0]:
+            raise Exception("Tried to set invalid range.")
+        self._param_ranges[param_ind,:] = range
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._calc_ticks()
 
@@ -178,8 +188,8 @@ class Grid(metaclass=ABCMeta):
                         self._props['title_font_scale'],
                         self._colors['title'], self._props['title_thickness'], cv2.LINE_AA)
 
-            #image[self._y_center, self._x_center, :3] = 255
-            #image[self._title_text_pos[1], self._title_text_pos[0], 2] = 255
+            # image[self._y_center, self._x_center, :3] = 255
+            # image[self._title_text_pos[1], self._title_text_pos[0], 2] = 255
 
     def draw_cursor(self, image):
         """
