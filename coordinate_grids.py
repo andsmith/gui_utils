@@ -7,7 +7,7 @@ import cv2
 import time
 import numpy as np
 from abc import abstractmethod, ABCMeta
-from .drawing import draw_rect, draw_box
+from .drawing import draw_rect, draw_box, in_bbox
 
 RGB_COLORS = {'white': (255, 255, 255),
               'light_gray': (184, 184, 184),
@@ -35,7 +35,7 @@ class Grid(metaclass=ABCMeta):
                           'cursor_string': "(%.2f, %.2f)",
                           'crosshair_length': 20,
                           'tick_length': 20,
-                          'n_ticks': 9}
+                          'show_ticks':(True, True)}
 
     DEFAULT_COLORS_BGRA = {'bkg': _rgb_to_bgra(RGB_COLORS['dark_gray'], 255),
                            'heavy': _rgb_to_bgra(RGB_COLORS['white'], 255),
@@ -68,6 +68,8 @@ class Grid(metaclass=ABCMeta):
         self._title = title
         self._axis_labels = axis_labels
         self._param_ranges = np.array(param_ranges)
+        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+
         self._minors, self._minors_unlabeled = minor_ticks, minor_unlabeled_ticks
         self._bbox = bbox
         self._image_offset = np.array([self._bbox['left'], self._bbox['top']])
@@ -79,7 +81,6 @@ class Grid(metaclass=ABCMeta):
         self._colors.update({} if colors is None else colors)
 
         self._x = expansion_speed
-        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._mouse_pos = self.grid_coords_to_pixels(init_values)
 
         self._calc_ticks()
@@ -89,22 +90,34 @@ class Grid(metaclass=ABCMeta):
         Mouse update function, CV2 style.
         Determine local unit coordinates.
         """
-        self._mouse_pos = x, y
+        if in_bbox(self._bbox, (x, y)):
+            self._mouse_pos = x, y
 
     def keyboard(self, k):
-
-        # check for range adjustments
+        """
+        Check for range adjustments, return new ranges if they changed, else None
+        """
+        rv = None
         for param_i, hotkey in enumerate(Grid.HOTKEYS):
             if not self._adj[param_i]:
                 continue
             if k & 0xff in hotkey['range_up']:
-                self._param_ranges[param_i] *= self._x
-                self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
-                self._calc_ticks()
+                self.set_param_range(max_val=self._param_ranges[param_i, 1] * self._x, param_ind=param_i)
+                rv = self._param_ranges
             elif k & 0xff in hotkey['range_down']:
-                self._param_ranges[param_i] /= self._x
-                self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
-                self._calc_ticks()
+                self.set_param_range(max_val=self._param_ranges[param_i, 1] / self._x, param_ind=param_i)
+                rv = self._param_ranges
+        return rv
+
+    def set_param_range(self, max_val, param_ind):
+        """
+        TODO: Generalize for N params?  For negative?
+        """
+        if max_val <= self._param_ranges[param_ind, 0]:
+            raise Exception("Tried to set param max below param min.")
+        self._param_ranges[param_ind][1] = max_val
+        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+        self._calc_ticks()
 
     @abstractmethod
     def _calc_ticks(self):
@@ -147,19 +160,26 @@ class Grid(metaclass=ABCMeta):
         pass
 
     def _set_title_positions(self):
+
+        self._y_center = int(self._bbox['top'] + self._props['tick_length'])
+        self._x_center = int(self._bbox['left'] + self._size[0] / 2)
+
         title = self._title if self._title is not None else ""
         (width, height), baseline = cv2.getTextSize(title,
                                                     self._props['title_font'],
                                                     self._props['title_font_scale'],
                                                     thickness=self._props['title_thickness'])
-        self._title_text_pos = int(self._bbox['left'] + self._size[0] / 2 - width / 2), \
-                               int(self._bbox['top'] + height * 2)
+        self._title_text_pos = self._x_center - int(width / 2), \
+                               self._y_center + height
 
     def _draw_title(self, image):
         if self._title is not None:
             cv2.putText(image, self._title, self._title_text_pos, self._props['title_font'],
                         self._props['title_font_scale'],
                         self._colors['title'], self._props['title_thickness'], cv2.LINE_AA)
+
+            #image[self._y_center, self._x_center, :3] = 255
+            #image[self._title_text_pos[1], self._title_text_pos[0], 2] = 255
 
     def draw_cursor(self, image):
         """
@@ -259,16 +279,17 @@ class CartesianGrid(Grid):
                                 self._props['font'], tick_font_scale, color, 1, cv2.LINE_AA)
 
         for axis in (0, 1):
-            _draw_ticks(self._param_ticks[axis]['major'])
-            _draw_ticks(self._param_ticks[axis]['minor_labeled'])
-            _draw_ticks(self._param_ticks[axis]['minor_unlabeled'])
+            if self._props['show_ticks'][axis]:
+                _draw_ticks(self._param_ticks[axis]['major'])
+                _draw_ticks(self._param_ticks[axis]['minor_labeled'])
+                _draw_ticks(self._param_ticks[axis]['minor_unlabeled'])
 
         # cursor
         self.draw_cursor(image)
 
     def _get_axis_label_positions(self):
         # H-axis
-        h_indent = 40
+        h_indent = 30
         label = self._axis_labels[0] if self._axis_labels is not None and self._axis_labels[0] is not None else ""
         (width, height), baseline = cv2.getTextSize(label,
                                                     self._props['font'],
@@ -345,7 +366,7 @@ class CartesianGrid(Grid):
 
                 if is_vertical:
                     # drawing on left & right, writing on left
-                    y_rel = 1.0 - (value - self._param_ranges[1][0]) / self._param_spans[1]  # flip y
+                    y_rel = 1.0 - (value - self._param_ranges[1, 0]) / self._param_spans[1]  # flip y
                     y = int(self._bbox['top'] + y_rel * self._size[1])
                     draw_args_a = {'left': self._bbox['left'], 'width': tick_length,
                                    'top': y, 'height': tick_thickness}
@@ -354,7 +375,7 @@ class CartesianGrid(Grid):
                     text_xy = x_left, y + int(size[0][1] / 2) if string is not None else None
                 else:
                     # drawing on top & bottom, writing on bottom
-                    x_rel = (value - self._param_ranges[0][0]) / self._param_spans[0]
+                    x_rel = (value - self._param_ranges[0, 0]) / self._param_spans[0]
                     x = int(self._bbox['left'] + x_rel * self._size[0])
                     draw_args_a = {'left': x, 'width': tick_thickness,
                                    'top': self._bbox['top'], 'height': tick_length}
@@ -390,7 +411,9 @@ class CartesianGrid(Grid):
                     'minor_unlabeled': unlabeled_minor_ticks}
 
         self._param_ticks = [_calc(p_range[0], p_range[1], vert)
-                             for p_range, vert in zip(self._param_ranges, (False, True))]
+                             for p_range, vert in zip([self._param_ranges[0, :],
+                                                       self._param_ranges[1, :]],
+                                                      (False, True))]
 
 
 def grid_sandbox():
