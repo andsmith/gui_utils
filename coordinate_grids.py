@@ -107,6 +107,7 @@ class Grid(metaclass=ABCMeta):
         """
         Mouse update function, CV2 style.
         Determine local unit coordinates.
+        return True if values change
         """
 
         self._mouse_pos = x, y
@@ -122,6 +123,9 @@ class Grid(metaclass=ABCMeta):
             pos = self.pixel_to_grid_coords(self._mouse_pos)
             self._marker_pos_grid = min(max(self._param_ranges[0][0], pos[0]), self._param_ranges[0][1]), \
                                     min(max(self._param_ranges[1][0], pos[1]), self._param_ranges[1][1])
+
+            return True
+        return False
 
     def keyboard(self, k):
         """
