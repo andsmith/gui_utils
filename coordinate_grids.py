@@ -10,7 +10,6 @@ from abc import abstractmethod, ABCMeta
 from .drawing import draw_rect, draw_box, in_bbox
 
 RGB_COLORS = {'white': (255, 255, 255),
-              'light_gray': (184, 184, 184),
               'gray': (128, 128, 128),
               'dark_gray': (20, 20, 20)}
 
@@ -43,7 +42,7 @@ class Grid(metaclass=ABCMeta):
 
     DEFAULT_COLORS_BGRA = {'bkg': _rgb_to_bgra(RGB_COLORS['dark_gray'], 255),
                            'heavy': _rgb_to_bgra(RGB_COLORS['white'], 255),
-                           'light': _rgb_to_bgra(RGB_COLORS['light_gray'], 255),
+                           'light': _rgb_to_bgra(RGB_COLORS['gray'], 255),
                            'title': _rgb_to_bgra(RGB_COLORS['gray'], 255), }
     TITLE_OPACITY = 0.33
 
@@ -98,7 +97,7 @@ class Grid(metaclass=ABCMeta):
         grid_mean = np.mean(self._param_ranges, axis=1)
         marker_pos_grid = [grid_mean[0] if init_values[0] is None else init_values[0],
                            grid_mean[1] if init_values[1] is None else init_values[1]]
-        self._marker_pos = self.grid_coords_to_pixels(marker_pos_grid)
+        self._marker_pos_grid = marker_pos_grid  # self.grid_coords_to_pixels(marker_pos_grid)
 
         self._dragging_marker = False
 
@@ -114,19 +113,15 @@ class Grid(metaclass=ABCMeta):
 
         if event == cv2.EVENT_LBUTTONDOWN:
             if in_bbox(self._bbox, (x, y)):
-                # if np.linalg.norm(self._mouse_pos - self._marker_pos) < self._props['marker_rad'][1]:
                 self._dragging_marker = True
-
-                self._marker_pos = self._mouse_pos
 
         elif event == cv2.EVENT_LBUTTONUP:
             self._dragging_marker = False
 
         if self._dragging_marker:
-            self._mouse_pos = x, y
-            if in_bbox(self._bbox, (x, y)):
-                self._marker_pos = self._mouse_pos
-            # TODO:  Else put exactly on the param limit / grid edge?
+            pos = self.pixel_to_grid_coords(self._mouse_pos)
+            self._marker_pos_grid = min(max(self._param_ranges[0][0], pos[0]), self._param_ranges[0][1]), \
+                                    min(max(self._param_ranges[1][0], pos[1]), self._param_ranges[1][1])
 
     def keyboard(self, k):
         """
@@ -148,22 +143,9 @@ class Grid(metaclass=ABCMeta):
         if max_val <= self._param_ranges[param_ind, 0]:
             raise Exception("Tried to set param max below param min.")
 
-        old_marker_pos_grid = self.pixel_to_grid_coords(self._marker_pos)
         self._param_ranges[param_ind][1] = max_val
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._calc_ticks()
-        self._marker_pos = self.grid_coords_to_pixels(old_marker_pos_grid)
-
-    '''
-    def set_param_range(self, range, param_ind):
-        if range[1] <= range[0]:
-            raise Exception("Tried to set invalid range.")
-        old_marker_pos_grid = self.grid_coords_to_pixels(self._marker_pos)
-        self._param_ranges[param_ind, :] = range
-        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
-        self._calc_ticks()
-        self._marker_pos = self.pixel_to_grid_coords(old_marker_pos_grid)
-    '''
 
     @abstractmethod
     def _calc_ticks(self):
@@ -177,13 +159,13 @@ class Grid(metaclass=ABCMeta):
         Marker, if in use, else mouse.
         """
         if self._props['user_marker']:
-            pos = self._marker_pos
+            pos = self._marker_pos_grid
         else:
-            pos = self._mouse_pos
+            pos = self.pixel_to_grid_coords(self._mouse_pos)
 
         if pos[0] is None or pos[1] is None:
             return None, None
-        return self.pixel_to_grid_coords(pos)
+        return pos
 
     @abstractmethod
     def pixel_to_grid_coords(self, xy_pos):
@@ -210,7 +192,9 @@ class Grid(metaclass=ABCMeta):
         if self._props['user_marker']:
 
             m_rad = self._props['marker_rad']
-            c = int(self._marker_pos[0]), int(self._marker_pos[1])
+
+            marker_pos = self.grid_coords_to_pixels(self._marker_pos_grid)
+            c = int(marker_pos[0]), int(marker_pos[1])
             box_left = max(c[0] - m_rad[0], self._bbox['left'])
             box_right = min(c[0] + m_rad[0], self._bbox['right'])
             box_top = max(c[1] - m_rad[0], self._bbox['top'])
@@ -237,7 +221,7 @@ class Grid(metaclass=ABCMeta):
                 y_offset = -30 * self._props['cursor_font_scale']
             text_xy = c[0], int(c[1] + y_offset)
 
-            string = self._props['marker_string'] % tuple(self.get_values().tolist())
+            string = self._props['marker_string'] % tuple(self._marker_pos_grid)
             self._write_at_coords(image, string, text_xy, self._colors['heavy'])
 
     @abstractmethod
