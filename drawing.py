@@ -1,7 +1,9 @@
 import numpy as np
 
+
 def in_bbox(bbox, xy):
-    return bbox['top']<=xy[1] <bbox['bottom'] and bbox['left']<=xy[0] <bbox['right']
+    return bbox['top'] <= xy[1] < bbox['bottom'] and bbox['left'] <= xy[0] < bbox['right']
+
 
 def blend_colors(color, bkg, alpha):
     return np.uint8(np.array(color) * alpha + np.array(bkg) * (1. - alpha))

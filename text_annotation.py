@@ -132,9 +132,11 @@ class StatusMessages(object):
 
         if self._bkg_alpha is not None:
             # weighted blend
-            src_subset = img[self._txt_box['top']:self._txt_box['bottom'],
-                         self._txt_box['left']:self._txt_box['right'], :3] * self._src_weights
-            src_dest_blend = np.dstack((np.uint8(src_subset + self._txt_img_weighted), self._txt_img[:, :, 3]))
+            src_subset = cv2.multiply(img[self._txt_box['top']:self._txt_box['bottom'],
+                                      self._txt_box['left']:self._txt_box['right'], :3], self._src_weights,
+                                      dtype=cv2.CV_32F)
+            blend = np.add(src_subset, self._txt_img_weighted)
+            src_dest_blend = np.dstack((blend, self._txt_img[:, :, 3]))
         else:
             src_dest_blend = self._txt_img
 
@@ -185,10 +187,10 @@ class StatusMessages(object):
 
         if self._n_chan == 4:
             img_weights = self._txt_img[:, :, 3] / 255.
-            self._src_weights = 1 - np.dstack([img_weights,
+            self._src_weights = 1 - cv2.merge([img_weights,
                                                img_weights,
                                                img_weights])
-            self._txt_img_weighted = self._txt_img[:, :, :3] * (1 - self._src_weights)
+            self._txt_img_weighted = cv2.multiply(self._txt_img[:, :, :3], (1 - self._src_weights), dtype=cv2.CV_32F)
 
 
 def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
