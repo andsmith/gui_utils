@@ -32,9 +32,13 @@ class Grid(metaclass=ABCMeta):
                           'cursor_font_scale': .8,
                           'draw_bounding_box': True,
                           'tick_string': "%.2f",
-                          'cursor_string': "(%.2f, %.2f)",
+                          'mouse_string': None,  # "(%.2f, %.2f)",
+                          'marker_string': "(%.2f, %.2f)",
                           'crosshair_length': 20,
                           'tick_length': 20,
+                          'user_marker': True,
+                          'marker_dot_size': 2,
+                          'marker_rad': (10, 15),  # inner, outer
                           'show_ticks': (True, True)}
 
     DEFAULT_COLORS_BGRA = {'bkg': _rgb_to_bgra(RGB_COLORS['dark_gray'], 255),
@@ -48,8 +52,16 @@ class Grid(metaclass=ABCMeta):
                {'range_up': [ord('0'), ord('o')],  # param 0 adjust ('o' just in case')
                 'range_down': [ord('p')]}]
 
-    def __init__(self, bbox, param_ranges=((0., 1.), (0., 1.)), init_values=(None, None), colors=None, draw_props=None,
-                 expansion_speed=1.1, title=None, axis_labels=('x', 'y'), minor_ticks=True, minor_unlabeled_ticks=True,
+    def __init__(self, bbox,
+                 param_ranges=((0., 1.), (0., 1.)),
+                 init_values=(None, None),
+                 colors=None,
+                 draw_props=None,
+                 expansion_speed=1.1,
+                 title=None,
+                 axis_labels=('x', 'y'),
+                 minor_ticks=True,
+                 minor_unlabeled_ticks=True,
                  adjustability=(True, True)):
         """
         Initialize a new grid.
@@ -81,7 +93,14 @@ class Grid(metaclass=ABCMeta):
         self._colors.update({} if colors is None else colors)
 
         self._x = expansion_speed
-        self._mouse_pos = self.grid_coords_to_pixels(init_values)
+
+        self._mouse_pos = None
+        grid_mean = np.mean(self._param_ranges, axis=1)
+        marker_pos_grid = [grid_mean[0] if init_values[0] is None else init_values[0],
+                           grid_mean[1] if init_values[1] is None else init_values[1]]
+        self._marker_pos = self.grid_coords_to_pixels(marker_pos_grid)
+
+        self._dragging_marker = False
 
         self._calc_ticks()
 
@@ -90,8 +109,24 @@ class Grid(metaclass=ABCMeta):
         Mouse update function, CV2 style.
         Determine local unit coordinates.
         """
-        if in_bbox(self._bbox, (x, y)):
+
+        self._mouse_pos = x, y
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if in_bbox(self._bbox, (x, y)):
+                # if np.linalg.norm(self._mouse_pos - self._marker_pos) < self._props['marker_rad'][1]:
+                self._dragging_marker = True
+
+                self._marker_pos = self._mouse_pos
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            self._dragging_marker = False
+
+        if self._dragging_marker:
             self._mouse_pos = x, y
+            if in_bbox(self._bbox, (x, y)):
+                self._marker_pos = self._mouse_pos
+            # TODO:  Else put exactly on the param limit / grid edge?
 
     def keyboard(self, k):
         """
@@ -102,32 +137,33 @@ class Grid(metaclass=ABCMeta):
             if not self._adj[param_i]:
                 continue
             if k & 0xff in hotkey['range_up']:
-                self.set_param_range(max_val=self._param_ranges[param_i, 1] * self._x, param_ind=param_i)
+                self.set_param_max(max_val=self._param_ranges[param_i, 1] * self._x, param_ind=param_i)
                 rv = self._param_ranges
             elif k & 0xff in hotkey['range_down']:
-                self.set_param_range(max_val=self._param_ranges[param_i, 1] / self._x, param_ind=param_i)
+                self.set_param_max(max_val=self._param_ranges[param_i, 1] / self._x, param_ind=param_i)
                 rv = self._param_ranges
         return rv
 
     def set_param_max(self, max_val, param_ind):
-        """
-        TODO: Generalize for N params?  For negative?
-        """
         if max_val <= self._param_ranges[param_ind, 0]:
             raise Exception("Tried to set param max below param min.")
+
+        old_marker_pos_grid = self.pixel_to_grid_coords(self._marker_pos)
         self._param_ranges[param_ind][1] = max_val
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._calc_ticks()
+        self._marker_pos = self.grid_coords_to_pixels(old_marker_pos_grid)
 
+    '''
     def set_param_range(self, range, param_ind):
-        """
-        TODO: Generalize for N params?  For negative?
-        """
         if range[1] <= range[0]:
             raise Exception("Tried to set invalid range.")
-        self._param_ranges[param_ind,:] = range
+        old_marker_pos_grid = self.grid_coords_to_pixels(self._marker_pos)
+        self._param_ranges[param_ind, :] = range
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._calc_ticks()
+        self._marker_pos = self.pixel_to_grid_coords(old_marker_pos_grid)
+    '''
 
     @abstractmethod
     def _calc_ticks(self):
@@ -137,9 +173,17 @@ class Grid(metaclass=ABCMeta):
         pass
 
     def get_values(self):
-        if self._mouse_pos[0] is None or self._mouse_pos[1] is None:
+        """
+        Marker, if in use, else mouse.
+        """
+        if self._props['user_marker']:
+            pos = self._marker_pos
+        else:
+            pos = self._mouse_pos
+
+        if pos[0] is None or pos[1] is None:
             return None, None
-        return self.pixel_to_grid_coords(self._mouse_pos)
+        return self.pixel_to_grid_coords(pos)
 
     @abstractmethod
     def pixel_to_grid_coords(self, xy_pos):
@@ -161,6 +205,40 @@ class Grid(metaclass=ABCMeta):
         draw grid within self._bbox of image
         """
         pass
+
+    def draw_marker(self, image):
+        if self._props['user_marker']:
+
+            m_rad = self._props['marker_rad']
+            c = int(self._marker_pos[0]), int(self._marker_pos[1])
+            box_left = max(c[0] - m_rad[0], self._bbox['left'])
+            box_right = min(c[0] + m_rad[0], self._bbox['right'])
+            box_top = max(c[1] - m_rad[0], self._bbox['top'])
+            box_bottom = min(c[1] + m_rad[0], self._bbox['bottom'])
+            w = box_right - box_left
+            h = box_bottom - box_top
+
+            draw_rect(image, box_left, box_top, w, h, self._colors['light'])
+
+            cross_left = max(c[0] - m_rad[1], self._bbox['left'])
+            cross_right = min(c[0] + m_rad[1], self._bbox['right'])
+            cross_top = max(c[1] - m_rad[1], self._bbox['top'])
+            cross_bottom = min(c[1] + m_rad[1], self._bbox['bottom'])
+            w = cross_right - cross_left
+            h = cross_bottom - cross_top
+            cross_thickness = 1
+            # h
+            draw_rect(image, cross_left, int(c[1] - cross_thickness / 2), w, cross_thickness, self._colors['heavy'])
+            # v
+            draw_rect(image, int(c[0] - cross_thickness / 2), cross_top, cross_thickness, h, self._colors['heavy'])
+            if c[1] < (self._bbox['top'] + self._bbox['bottom']) / 2:
+                y_offset = 30 * self._props['cursor_font_scale']
+            else:
+                y_offset = -30 * self._props['cursor_font_scale']
+            text_xy = c[0], int(c[1] + y_offset)
+
+            string = self._props['marker_string'] % tuple(self.get_values().tolist())
+            self._write_at_coords(image, string, text_xy, self._colors['heavy'])
 
     @abstractmethod
     def _get_axis_label_positions(self):
@@ -192,39 +270,48 @@ class Grid(metaclass=ABCMeta):
             # image[self._title_text_pos[1], self._title_text_pos[0], 2] = 255
 
     def draw_cursor(self, image):
-        """
-        The label that follows the cursor
-        """
-        if self._mouse_pos[0] is None or self._mouse_pos[1] is None:
+
+        if self._mouse_pos is None:
             return
-        xy = self._mouse_pos
-        if self._props['cursor_string'] is not None:
-            string = self._props['cursor_string'] % tuple(self.get_values().tolist())
-            (width, height), baseline = cv2.getTextSize(string, self._props['font'], self._props['cursor_font_scale'],
-                                                        thickness=1)
-            ascender = int(baseline / 2) + 1
-            text_y = xy[1] + int(height / 2)
-            text_x = xy[0] - int(width / 2)
 
-            # don't write outside box
-            if xy[0] > self._bbox['right'] - width / 2:
-                text_x = self._bbox['right'] - width
-            if xy[0] < self._bbox['left'] + width / 2:
-                text_x = self._bbox['left']
-            if xy[1] > self._bbox['bottom'] - height / 2 - baseline:
-                text_y = self._bbox['bottom'] - baseline
-            if xy[1] < self._bbox['top'] + height / 2 + ascender:
-                text_y = self._bbox['top'] + height + ascender
+        if self._props['mouse_string'] is not None and self._mouse_pos is not None and not self._dragging_marker:
+            # text cursor
+            values = self.pixel_to_grid_coords(self._mouse_pos)
+            string = self._props['mouse_string'] % tuple(values)
 
-            cv2.putText(image, string, (text_x, text_y), self._props['font'], self._props['cursor_font_scale'],
-                        self._colors['heavy'], 1, cv2.LINE_AA)
+            self._write_at_coords(image, string, self._mouse_pos, color=self._colors['heavy'])
         else:
+            # crosshair
+            xy = self._mouse_pos
             l = int(self._props['crosshair_length'] / 2)
             if self._bbox['left'] + l <= xy[0] < self._bbox['right'] - l and \
                     self._bbox['top'] + l <= xy[1] < self._bbox['bottom'] - l:
                 x_px, y_px = self._mouse_pos
                 draw_rect(image, x_px, y_px - l, 1, l * 2, self._colors['heavy'])
                 draw_rect(image, x_px - l, y_px, l * 2, 1, self._colors['heavy'])
+
+    def _write_at_coords(self, image, string, xy, color):
+        """
+        Write the coords, at the coords
+        """
+        (width, height), baseline = cv2.getTextSize(string, self._props['font'], self._props['cursor_font_scale'],
+                                                    thickness=1)
+        ascender = int(baseline / 2) + 1
+        text_y = xy[1] + int(height / 2)  # center text
+        text_x = xy[0] - int(width / 2)
+
+        # don't write outside box
+        if xy[0] > self._bbox['right'] - width / 2:
+            text_x = self._bbox['right'] - width
+        if xy[0] < self._bbox['left'] + width / 2:
+            text_x = self._bbox['left']
+        if xy[1] > self._bbox['bottom'] - height / 2 - baseline:
+            text_y = self._bbox['bottom'] - baseline
+        if xy[1] < self._bbox['top'] + height / 2 + ascender:
+            text_y = self._bbox['top'] + height + ascender
+
+        cv2.putText(image, string, (text_x, text_y), self._props['font'], self._props['cursor_font_scale'],
+                    self._colors['heavy'], 1, cv2.LINE_AA)
 
     def _draw_base_image(self, image):
         """
@@ -295,6 +382,7 @@ class CartesianGrid(Grid):
                 _draw_ticks(self._param_ticks[axis]['minor_unlabeled'])
 
         # cursor
+        self.draw_marker(image)
         self.draw_cursor(image)
 
     def _get_axis_label_positions(self):
@@ -426,11 +514,22 @@ class CartesianGrid(Grid):
                                                       (False, True))]
 
 
+def _test_conversions(grid, size):
+    for _ in range(100):
+        xy = np.random.rand(2) * size
+        xy_grid = grid.pixel_to_grid_coords(xy)
+        xy_prime = grid.grid_coords_to_pixels(xy_grid)
+        if int(xy[0]) != xy_prime[0] or int(xy[1]) != xy_prime[1]:
+            raise Exception("Conversion wrong:  %s  ->  %s  ->  %s" % (xy, xy_grid, xy_prime))
+
+
 def grid_sandbox():
-    blank = np.zeros((700, 1000, 4), np.uint8)
+    shape = (700, 1000, 4)
+    blank = np.zeros(shape, np.uint8)
     bbox = {'top': 10, 'bottom': blank.shape[0] - 10, 'left': 10, 'right': blank.shape[1] - 10}
     grid = CartesianGrid(bbox, param_ranges=((0.0, 1.5), (0.0, 78.3567456735)), title='Grid')
     window_name = "Grid sandbox"
+    _test_conversions(grid, (shape[1], shape[0]))
 
     def _mouse(event, x, y, flags, param):
         grid.mouse(event, x, y, flags, param)
