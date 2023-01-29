@@ -97,7 +97,7 @@ class Grid(metaclass=ABCMeta):
         grid_mean = np.mean(self._param_ranges, axis=1)
         marker_pos_grid = [grid_mean[0] if init_values[0] is None else init_values[0],
                            grid_mean[1] if init_values[1] is None else init_values[1]]
-        self._marker_pos_grid = marker_pos_grid  # self.grid_coords_to_pixels(marker_pos_grid)
+        self._marker_pos_grid = tuple(marker_pos_grid)  # self.grid_coords_to_pixels(marker_pos_grid)
 
         self._dragging_marker = False
 
