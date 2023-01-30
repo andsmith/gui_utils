@@ -143,6 +143,9 @@ class Grid(metaclass=ABCMeta):
                 rv = self._param_ranges
         return rv
 
+    def move_marker(self, values):
+        self._marker_pos_grid = values
+
     def set_param_max(self, max_val, param_ind):
         if max_val <= self._param_ranges[param_ind, 0]:
             raise Exception("Tried to set param max below param min.")
