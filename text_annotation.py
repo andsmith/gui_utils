@@ -14,62 +14,53 @@ class StatusMessages(object):
     set bkg_alpha=None  & use 3-channel images if it's too slow
     """
 
-    def __init__(self, img_shape, text_color, bkg_color, font=cv2.FONT_HERSHEY_SIMPLEX,
-                 bkg_alpha=0.6, line_type=cv2.LINE_AA, fullscreen=False,
-                 outside_margins=(40, 40), inside_margins=(10, 10),
-                 max_font_scale=5, spacing=5):
+    def __init__(self, img_shape, text_color, bkg_color, font=cv2.FONT_HERSHEY_SIMPLEX, line_type=cv2.LINE_AA,
+                 outside_margins=(40, 40), inside_margins=(10, 10), max_font_scale=5, spacing=5, v_anchor='bottom'):
         """
+
+        will do alpha blending if colors have an alpha channel
+
         :param img_shape:  lines will be added to images of this shape
-        :param text_color:  rgba tuple in 0, 255
-        :param bkg_color: rgb tuple
+        :param text_color:  int/rgb/rgba tuple in 0, 255
+        :param bkg_color:  same as text_color
         :param font: cv2 font
-        :param bkg_alpha: blend background into image float in (0, 1), or NONE for opaque (faster, bkg_color[3] ignored)
         :param line_type: cv2 line type, for text drawing
-        :param fullscreen:  Show text in whole image, not just best-fitting box at  bottom.
         :param outside_margins: 2-tuple, pixels outside of box (horiz, vert)
         :param inside_margins: 2-tuple, pixels between box and text (horiz, vert)
         :param max_font_scale:  float
         :param spacing:  Pixels between lines of text
+        :param v_anchor: one of 'bottom','top','both', where box is anchored vertically wrt image bounds
         """
         self._o_margins = outside_margins
         self._i_margins = inside_margins
-        self._fullscreen = fullscreen
+        self._font = font
+        self._thickness = 1
+        self._line_type = line_type
+        self._anchor = v_anchor
+
         if np.array(img_shape).size > 3:
             raise Exception("img_shape doesn't look like a list of dimensions")
-        self._bkg_alpha = bkg_alpha
-        if self._bkg_alpha is None:
-            self._text_color = text_color[:3]
-            self._n_chan = 3
-            self._bkg_color = bkg_color[:3]  # just in case
 
-        else:
-            self._text_color = text_color if len(text_color) == 4 else (text_color[0],
-                                                                        text_color[1],
-                                                                        text_color[2], 255)
-            self._bkg_color = (bkg_color[0],
-                               bkg_color[1],
-                               bkg_color[2], int(bkg_alpha * 255))
-            self._n_chan = 4
+        self._text_color = text_color
+        self._bkg_color = bkg_color
+
+        self._n_chan = len(self._text_color)
+        if not (self._n_chan == len(self._bkg_color) or self._n_chan != img_shape[2]):
+            raise Exception(
+                "Image shape, text color, and bkg color must all have the same number of channels, got %i, %i, %i." % (
+                    img_shape[2], self._n_chan, len(self._bkg_color)))
 
         self._spacing = spacing
-        self._font = font
-        self._line_type = line_type
         self._max_font_scale = max_font_scale
-        self._thickness = 1
-        self._img_shape = None
-        self._msg_width = None
-        self.set_image_shape(img_shape)
+        self._img_shape = img_shape
+        self._max_width = img_shape[1] - self._o_margins[0] * 2 - self._i_margins[0] * 2
+        self._max_height = img_shape[0] - self._o_margins[1] * 2 - self._i_margins[1] * 2
 
         # Stuff not recalculated every frame, only when messages change
         self._font_scale = None
         self._txt_img = None
         self._txt_box = None
         self._msgs = []
-
-    def set_image_shape(self, img_shape):
-        logging.info("Setting status bar for images of shape:  %s" % (img_shape,))
-        self._img_shape = img_shape
-        self._msg_width = img_shape[1] - self._o_margins[0] * 2 - self._i_margins[1] * 2
 
     def add_msgs(self, msgs, name, *args, **kwargs):
         for i, msg in enumerate(msgs):
@@ -97,7 +88,11 @@ class StatusMessages(object):
 
     def _calc_font_scale(self):
         lines = [m['msg'] for m in self._msgs]
-        font_scale = get_best_group_font_size(lines, self._font, self._thickness, self._msg_width, self._max_font_scale)
+        font_scale = get_best_font_scale((self._max_height, self._max_width),
+                                         lines,
+                                         self._font,
+                                         max_font_scale=self._max_font_scale,
+                                         thickness=self._thickness)
         self._font_scale = font_scale if font_scale < self._max_font_scale else self._max_font_scale
 
     def clear(self):
@@ -130,8 +125,9 @@ class StatusMessages(object):
         if self._txt_img is None:
             self._render_osd_image()
 
-        if self._bkg_alpha is not None:
+        if self._n_chan == 4:
             # weighted blend
+
             src_subset = cv2.multiply(img[self._txt_box['top']:self._txt_box['bottom'],
                                       self._txt_box['left']:self._txt_box['right'], :3], self._src_weights,
                                       dtype=cv2.CV_32F)
@@ -140,38 +136,45 @@ class StatusMessages(object):
         else:
             src_dest_blend = self._txt_img
 
-        img[self._txt_box['top']:self._txt_box['bottom'], self._txt_box['left']:self._txt_box['right'],
-        :] = src_dest_blend
+        img[self._txt_box['top']:self._txt_box['bottom'],
+        self._txt_box['left']:self._txt_box['right'], :] = src_dest_blend
+
+    def _get_msgs_bbox(self, width, height):
+        """
+        Given the shape of the text that is to be written, where is it's bounding box?
+        Apply margins here
+        """
+        top = self._o_margins[1]
+        bottom = self._img_shape[0] - self._o_margins[1]
+        if self._anchor == 'bottom':
+            top = bottom - height -self._i_margins[1]*2
+        elif self._anchor == 'top':
+            bottom = top + height+self._i_margins[1]*2
+
+        return {'right': self._img_shape[1] - self._o_margins[0],
+                'bottom': bottom,
+                'left': self._o_margins[0],
+                'top': top}
 
     def _render_osd_image(self):
         """
         Create image w/text to apply to frames.
         Create alpha weights for applying it if nchannels=4
         """
-        text_dims = []
+
         self._calc_font_scale()
 
-        for msg in self._msgs:
-            (width, ascend), descend = cv2.getTextSize(msg['msg'], fontFace=self._font,
-                                                       fontScale=self._font_scale, thickness=self._thickness)
-            text_dims.append({'ascend': ascend,
-                              'descend': descend,
-                              'width': width})
+        lines = [m['msg'] for m in self._msgs]
+        text_dims = get_line_text_sizes(lines, self._font, self._font_scale, thickness=self._thickness)
+        msgs_width, msgs_height = get_text_total_size(lines, self._font, self._font_scale, self._spacing,
+                                                      thickness=self._thickness)
 
-        msgs_height = np.sum([m['ascend'] + m['descend'] for m in text_dims])
-        if len(self._msgs) > 1:
-            msgs_height += self._spacing * (len(self._msgs) - 1)
-        if self._fullscreen:
-            top = self._o_margins[1]
-        else:
-            top = self._img_shape[0] - self._o_margins[1] - self._i_margins[1] * 2 - msgs_height
-        self._txt_box = {'right': self._img_shape[1] - self._o_margins[0],
-                         'bottom': self._img_shape[0] - self._o_margins[1],
-                         'left': self._o_margins[0],
-                         'top': top}
+        # include INSIDE margins:
+        self._txt_box = self._get_msgs_bbox(msgs_width, msgs_height)
 
         text_img = np.zeros((self._txt_box['bottom'] - self._txt_box['top'],
                              self._txt_box['right'] - self._txt_box['left'], self._n_chan), dtype=np.uint8)
+
         text_img[:, :, :] = self._bkg_color
 
         text_x = self._i_margins[0]
@@ -179,8 +182,9 @@ class StatusMessages(object):
         for l, msg in enumerate(self._msgs):
             text_y += text_dims[l]['ascend']
 
-            cv2.putText(text_img, msg['msg'], (text_x, text_y), self._font, self._font_scale, self._text_color,
-                        self._thickness, cv2.LINE_AA)
+            cv2.putText(text_img, msg['msg'], (text_x, text_y), self._font, self._font_scale,
+                        self._text_color,
+                        thickness=self._thickness, lineType=self._line_type)
 
             text_y += text_dims[l]['descend'] + self._spacing
         self._txt_img = text_img
@@ -191,27 +195,47 @@ class StatusMessages(object):
                                                img_weights,
                                                img_weights])
             self._txt_img_weighted = cv2.multiply(self._txt_img[:, :, :3], (1 - self._src_weights), dtype=cv2.CV_32F)
+        cv2.imwrite("test.jpg",self._txt_img)
+
+def get_line_text_sizes(lines, font, font_scale, thickness):
+    sizes = [cv2.getTextSize(line, fontFace=font, fontScale=font_scale, thickness=thickness) for line in lines]
+    text_dims = [{'ascend': s[0][1],
+                  'descend': s[1],
+                  'width': s[0][0]} for s in sizes]
+    return text_dims
 
 
-def get_best_font_scale(text, font, thickness, max_width, max_font_scale=10.0, step=0.1):
+def get_text_total_size(lines, font, font_scale, spacing, thickness):
+    line_dimensions = get_line_text_sizes(lines, font, font_scale, thickness)
+
+    width = np.max([d['width'] for d in line_dimensions])
+    height = np.sum([d['ascend'] + d['descend'] for d in line_dimensions])
+    if len(lines) > 1:
+        height += (len(lines) - 1) * spacing
+    return width, height
+
+
+def get_best_font_scale(shape, text, font, spacing=5, max_font_scale=10.0, step=0.05, thickness=1):
     """
-    Find the maximum font scale that fits text in given width.
-    :param text:  string
+    Find the maximum font scale that fits text in given space.
+    :param shape: (height, width) to fit
+    :param text:  list of strings, one per line
+    :param spacing: this many pixels between lines of text
     :param font: cv2 font
-    :param thickness:  cv2 value (irrelevant?)
-    :param max_width: pixels to fit text inside
     :param max_font_scale: search no higher than this
+    :param thickness:  cv2 value (irrelevant?)
     :param step:  search with this step size
     """
-    best_width = (0, 0)
-    for scale in np.arange(step, max_font_scale, step):
-        (width, _), _ = cv2.getTextSize(text, fontFace=font, fontScale=scale, thickness=thickness)
-        if width > max_width:
+
+    font_scale = max_font_scale
+    while font_scale > 0:
+        font_scale -= step
+        width, height = get_text_total_size(text, font, font_scale, spacing, thickness=thickness)
+
+        if width < shape[1] and height < shape[0]:
             break
-        best_width = (width, scale) if (max_width > width > best_width[0]) else best_width
-    return best_width[1]
 
+    if font_scale <= 0:
+        return None
 
-def get_best_group_font_size(text_lines, *args, **kwargs):
-    sizes = [get_best_font_scale(line, *args, **kwargs) for line in text_lines]
-    return np.min(sizes)
+    return font_scale
