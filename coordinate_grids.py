@@ -59,18 +59,19 @@ class Grid(metaclass=ABCMeta):
          'high': {'up': [ord('8')],
                   'down': [ord('i')]}}]
 
-
     def print_hotkeys(self):
         print("\n\n-------------\nHotkeys:\n")
         for param_i in range(len(Grid.HOTKEYS)):
-            axis_name = Grid.HOTKEYS[param_i]['name'] if self._axis_labels[param_i] is None else self._axis_labels[param_i]
+            axis_name = Grid.HOTKEYS[param_i]['name'] if self._axis_labels[param_i] is None else self._axis_labels[
+                param_i]
             print("    Axis:  %s" % (axis_name,))
-            for which_end in ['high','low']:
+            for which_end in ['high', 'low']:
                 for which_way in ['up', 'down']:
                     print("        %s end %s:  %s" % (which_end,
-                                                    which_way,
-                                                    ", ".join(["%s" % (chr(x),)
-                                                               for x in Grid.HOTKEYS[param_i][which_end][which_way]])))
+                                                      which_way,
+                                                      ", ".join(["%s" % (chr(x),)
+                                                                 for x in
+                                                                 Grid.HOTKEYS[param_i][which_end][which_way]])))
                 print("")
 
     def __init__(self, bbox,
@@ -102,7 +103,6 @@ class Grid(metaclass=ABCMeta):
         self._axis_labels = axis_labels
         self._param_ranges = np.array(param_ranges)
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
-        self.print_hotkeys()
 
         self._minors, self._minors_unlabeled = minor_ticks, minor_unlabeled_ticks
         self._bbox = bbox
@@ -172,6 +172,9 @@ class Grid(metaclass=ABCMeta):
             elif k & 0xff in hotkeys['low']['down']:
                 self.set_param_min(min_val=self._param_ranges[param_i, 0] - param_distance * self._x, param_ind=param_i)
                 rv = self._param_ranges
+
+        if rv is not None:
+            print("New ranges:  %s" % (self._param_ranges,))
         return rv
 
     def move_marker(self, values):
@@ -447,6 +450,7 @@ class CartesianGrid(Grid):
         low_margin_frac = 0.01  # don't put tics within this fraction of zero
 
         # calc  step size, at least 10 ticks of minor order
+
         def _calc(low, high, is_vertical):
             span = high - low
             margin = {'high': (high_margin_frac * span),
@@ -460,12 +464,12 @@ class CartesianGrid(Grid):
             minor_step = 10. ** minor_order
 
             # find where scales start (can be out of range)
-            major_tick_start = np.floor(low / major_step)
+            major_tick_start = np.ceil(low/ major_step) * major_step
             labeled_minor_tick_start = major_tick_start - 0.5 * major_step
-            unlabeled_minor_tick_start = np.floor(low / minor_step)
+            unlabeled_minor_tick_start = np.ceil(low/ minor_step) * minor_step
 
-            n_major = np.floor(span / major_step) * 2  # overkill
-            n_minor = np.floor(span / minor_step) * 2
+            n_major = np.ceil(span / major_step) * 2
+            n_minor = np.ceil(span / minor_step) * 2
 
             major_tick_locs = major_tick_start + np.arange(0, n_major) * major_step
             unlabeled_minor_tick_locs = unlabeled_minor_tick_start + np.arange(0, n_minor) * minor_step
@@ -556,7 +560,8 @@ def grid_sandbox():
     shape = (700, 1000, 4)
     blank = np.zeros(shape, np.uint8)
     bbox = {'top': 10, 'bottom': blank.shape[0] - 10, 'left': 10, 'right': blank.shape[1] - 10}
-    grid = CartesianGrid(bbox, param_ranges=((0.0, 1.5), (0.0, 78.3567456735)), title='Grid')
+    grid = CartesianGrid(bbox, param_ranges=((1.49234523452, 1.5), (0.0, 78.3567456735)), title='Grid')
+    grid.print_hotkeys()
     window_name = "Grid sandbox"
     _test_conversions(grid, (shape[1], shape[0]))
 
