@@ -163,7 +163,6 @@ class Grid(metaclass=ABCMeta):
 
         if k & 0xff == Grid.HOTKEYS['center']:
             for param_i in range(2):
-
                 new_low, new_high = self._marker_pos_grid[param_i] - self._param_spans[param_i] / 2, \
                                     self._marker_pos_grid[param_i] + self._param_spans[param_i] / 2
 
@@ -259,7 +258,8 @@ class Grid(metaclass=ABCMeta):
             m_rad = self._props['marker_rad']
 
             marker_pos = self.grid_coords_to_pixels(self._marker_pos_grid)
-            if not in_bbox(self._bbox, marker_pos):
+            if not (self._bbox['top'] <= marker_pos[1] <= self._bbox['bottom'] and
+                    self._bbox['left'] <= marker_pos[0] <= self._bbox['right']):
                 # draw arrow on edge pointing to marker?
                 return
 
