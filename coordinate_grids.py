@@ -46,32 +46,37 @@ class Grid(metaclass=ABCMeta):
                            'title': _rgb_to_bgra(RGB_COLORS['gray'], 255), }
     TITLE_OPACITY = 0.33
 
-    HOTKEYS = [
-        {'name': 'horizontal',
-         'low': {'up': [ord('p')],
-                 'down': [ord('o')]},
-         'high': {'up': [ord(']')],
-                  'down': [ord('[')]}},
+    HOTKEYS = {'param_ranges': [{'name': 'horizontal',
+                                 'low': {'up': [ord('p')],
+                                         'down': [ord('o')]},
+                                 'high': {'up': [ord(']')],
+                                          'down': [ord('[')]}},
 
-        {'name': 'vertical',
-         'low': {'up': [ord('k')],  # param 1, v-axis
-                 'down': [ord(',')]},
-         'high': {'up': [ord('8')],
-                  'down': [ord('i')]}}]
+                                {'name': 'vertical',
+                                 'low': {'up': [ord('k')],  # param 1, v-axis
+                                         'down': [ord(',')]},
+                                 'high': {'up': [ord('8')],
+                                          'down': [ord('i')]}}],
+               'center': ord('c')}
 
     def print_hotkeys(self):
         print("\n\n-------------\nHotkeys:\n")
-        for param_i in range(len(Grid.HOTKEYS)):
-            axis_name = Grid.HOTKEYS[param_i]['name'] if self._axis_labels[param_i] is None else self._axis_labels[
-                param_i]
-            print("    Axis:  %s" % (axis_name,))
+        for hotkey in Grid.HOTKEYS:
+            if hotkey != 'param_ranges':
+                print("    %s:  %s" % (hotkey, Grid.HOTKEYS[hotkey]))
+        for param_i in range(len(Grid.HOTKEYS['param_ranges'])):
+            axis_name = Grid.HOTKEYS['param_ranges'][param_i]['name'] if self._axis_labels[param_i] is None else \
+                self._axis_labels[
+                    param_i]
+            print("    Adjust axis:  %s" % (axis_name,))
             for which_end in ['high', 'low']:
                 for which_way in ['up', 'down']:
                     print("        %s end %s:  %s" % (which_end,
                                                       which_way,
                                                       ", ".join(["%s" % (chr(x),)
                                                                  for x in
-                                                                 Grid.HOTKEYS[param_i][which_end][which_way]])))
+                                                                 Grid.HOTKEYS['param_ranges'][param_i][which_end][
+                                                                     which_way]])))
                 print("")
 
     def __init__(self, bbox,
@@ -136,7 +141,7 @@ class Grid(metaclass=ABCMeta):
         self._mouse_pos = x, y
 
         if event == cv2.EVENT_LBUTTONDOWN:
-            if in_bbox(self._bbox, (x, y)):
+            if in_bbox(self._bbox, (x, y)):  # click anywhere in grid, possibly change bbox to marker bbox, etc.
                 self._dragging_marker = True
 
         elif event == cv2.EVENT_LBUTTONUP:
@@ -155,43 +160,55 @@ class Grid(metaclass=ABCMeta):
         Check for range adjustments, return new ranges if they changed, else None
         """
         rv = None
-        for param_i, hotkeys in enumerate(CartesianGrid.HOTKEYS):
-            if not self._adjustability[param_i]:
-                continue
-            param_distance = self._param_ranges[param_i, 1] - self._param_ranges[param_i, 0]
 
-            if k & 0xff in hotkeys['high']['up']:
-                self.set_param_max(max_val=self._param_ranges[param_i, 1] + param_distance * self._x, param_ind=param_i)
-                rv = self._param_ranges
-            elif k & 0xff in hotkeys['high']['down']:
-                self.set_param_max(max_val=self._param_ranges[param_i, 1] - param_distance * self._x, param_ind=param_i)
-                rv = self._param_ranges
-            elif k & 0xff in hotkeys['low']['up']:
-                self.set_param_min(min_val=self._param_ranges[param_i, 0] + param_distance * self._x, param_ind=param_i)
-                rv = self._param_ranges
-            elif k & 0xff in hotkeys['low']['down']:
-                self.set_param_min(min_val=self._param_ranges[param_i, 0] - param_distance * self._x, param_ind=param_i)
-                rv = self._param_ranges
+        if k & 0xff == Grid.HOTKEYS['center']:
+            for param_i in range(2):
 
-        if rv is not None:
-            print("New ranges:  %s" % (self._param_ranges,))
+                new_low, new_high = self._marker_pos_grid[param_i] - self._param_spans[param_i] / 2, \
+                                    self._marker_pos_grid[param_i] + self._param_spans[param_i] / 2
+
+                self.set_param_range(param_i, min_val=new_low, max_val=new_high)
+                rv = self._param_ranges
+        else:
+            for param_i, hotkeys in enumerate(Grid.HOTKEYS['param_ranges']):
+                if not self._adjustability[param_i]:
+                    continue
+
+                if k & 0xff in hotkeys['high']['up']:
+                    self.set_param_range(param_i,
+                                         max_val=self._param_ranges[param_i, 1] + self._param_spans[param_i] * self._x)
+                    rv = self._param_ranges
+                elif k & 0xff in hotkeys['high']['down']:
+                    self.set_param_range(param_i,
+                                         max_val=self._param_ranges[param_i, 1] - self._param_spans[param_i] * self._x)
+                    rv = self._param_ranges
+                elif k & 0xff in hotkeys['low']['up']:
+                    self.set_param_range(param_i,
+                                         min_val=self._param_ranges[param_i, 0] + self._param_spans[param_i] * self._x)
+                    rv = self._param_ranges
+                elif k & 0xff in hotkeys['low']['down']:
+                    self.set_param_range(param_i,
+                                         min_val=self._param_ranges[param_i, 0] - self._param_spans[param_i] * self._x)
+                    rv = self._param_ranges
+
         return rv
 
     def move_marker(self, values):
         self._marker_pos_grid = values
 
-    def set_param_max(self, max_val, param_ind):
-        if max_val <= self._param_ranges[param_ind, 0]:
-            raise Exception("Tried to set param max below param min.")
+    def set_param_range(self, param_ind, min_val=None, max_val=None):
 
-        self._param_ranges[param_ind][1] = max_val
-        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
-        self._calc_ticks()
-
-    def set_param_min(self, min_val, param_ind):
-        if min_val >= self._param_ranges[param_ind, 1]:
-            raise Exception("Tried to set param min above param max.")
-        self._param_ranges[param_ind, 0] = min_val
+        if (min_val is None and max_val is None) or \
+                (min_val is None and max_val <= self._param_ranges[param_ind, 0]) or \
+                (max_val is None and min_val >= self._param_ranges[param_ind, 1]) or \
+                (max_val is not None and min_val is not None and max_val <= min_val):
+            raise Exception("Tried to set invalid range:  updating %s with %s" % (
+                self._param_ranges[param_ind, :],
+                (min_val, max_val)))
+        if min_val is not None:
+            self._param_ranges[param_ind, 0] = min_val
+        if max_val is not None:
+            self._param_ranges[param_ind, 1] = max_val
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._calc_ticks()
 
@@ -242,6 +259,10 @@ class Grid(metaclass=ABCMeta):
             m_rad = self._props['marker_rad']
 
             marker_pos = self.grid_coords_to_pixels(self._marker_pos_grid)
+            if not in_bbox(self._bbox, marker_pos):
+                # draw arrow on edge pointing to marker?
+                return
+
             c = int(marker_pos[0]), int(marker_pos[1])
             box_left = max(c[0] - m_rad[0], self._bbox['left'])
             box_right = min(c[0] + m_rad[0], self._bbox['right'])
@@ -343,7 +364,7 @@ class Grid(metaclass=ABCMeta):
             text_y = self._bbox['top'] + height + ascender
 
         cv2.putText(image, string, (text_x, text_y), self._props['font'], self._props['cursor_font_scale'],
-                    self._colors['heavy'], 1, cv2.LINE_AA)
+                    color, 1, cv2.LINE_AA)
 
     def _draw_base_image(self, image):
         """
@@ -464,9 +485,9 @@ class CartesianGrid(Grid):
             minor_step = 10. ** minor_order
 
             # find where scales start (can be out of range)
-            major_tick_start = np.ceil(low/ major_step) * major_step
+            major_tick_start = np.ceil(low / major_step) * major_step
             labeled_minor_tick_start = major_tick_start - 0.5 * major_step
-            unlabeled_minor_tick_start = np.ceil(low/ minor_step) * minor_step
+            unlabeled_minor_tick_start = np.ceil(low / minor_step) * minor_step
 
             n_major = np.ceil(span / major_step) * 2
             n_minor = np.ceil(span / minor_step) * 2
