@@ -46,17 +46,37 @@ class Grid(metaclass=ABCMeta):
                            'title': _rgb_to_bgra(RGB_COLORS['gray'], 255), }
     TITLE_OPACITY = 0.33
 
-    HOTKEYS = [{'range_up': [ord(']')],  # param 1 adjust
-                'range_down': [ord('[')]},
-               {'range_up': [ord('0'), ord('o')],  # param 0 adjust ('o' just in case')
-                'range_down': [ord('p')]}]
+    HOTKEYS = [
+        # param 0 / h-axis,
+        {'low': {'up': [ord('p')],
+                 'down': [ord('o')]},
+         'high': {'up': [ord(']')],
+                  'down': [ord('[')]}},
+
+        # param 1 / v-axis,
+        {'low': {'up': [ord('k')],  # param 1, v-axis
+                 'down': [ord(',')]},
+         'high': {'up': [ord('8')],
+                  'down': [ord('i')]}}]
+
+    def print_hotkeys(self):
+        print("\n\n-------------\nHotkeys:\n")
+        for param_i in range(len(Grid.HOTKEYS)):
+            print("\tAxis %s: " % (param_i,))
+            for which_end in ['low', 'high']:
+                for which_way in ['up', 'down']:
+                    print("\t\t\t%s end %s:  %s" % (which_end,
+                                                    which_way,
+                                                    ", ".join(["%s" % (chr(x),)
+                                                               for x in Grid.HOTKEYS[param_i][which_end][which_way]])))
+                print("")
 
     def __init__(self, bbox,
                  param_ranges=((0., 1.), (0., 1.)),
                  init_values=(None, None),
                  colors=None,
                  draw_props=None,
-                 expansion_speed=1.1,
+                 expansion_speed=.1,  # add/remove this fraction of current range
                  title=None,
                  axis_labels=('x', 'y'),
                  minor_ticks=True,
@@ -71,8 +91,9 @@ class Grid(metaclass=ABCMeta):
         :param expansion_speed:  How fast to grow/shrink when user wants to reshape grid
         :param adjustability: (horizontal, vertical)
         """
+        self.print_hotkeys()
         self._title = None
-        self._adj = adjustability
+        self._adjustability = adjustability
         # use defaults where not specified
         self._props = Grid.DEFAULT_DRAW_PROPS.copy()
         self._props.update({} if draw_props is None else draw_props)
@@ -132,14 +153,22 @@ class Grid(metaclass=ABCMeta):
         Check for range adjustments, return new ranges if they changed, else None
         """
         rv = None
-        for param_i, hotkey in enumerate(Grid.HOTKEYS):
-            if not self._adj[param_i]:
+        for param_i, hotkeys in enumerate(CartesianGrid.HOTKEYS):
+            if not self._adjustability[param_i]:
                 continue
-            if k & 0xff in hotkey['range_up']:
-                self.set_param_max(max_val=self._param_ranges[param_i, 1] * self._x, param_ind=param_i)
+            param_distance = self._param_ranges[param_i, 1] - self._param_ranges[param_i, 0]
+
+            if k & 0xff in hotkeys['high']['up']:
+                self.set_param_max(max_val=self._param_ranges[param_i, 1] + param_distance * self._x, param_ind=param_i)
                 rv = self._param_ranges
-            elif k & 0xff in hotkey['range_down']:
-                self.set_param_max(max_val=self._param_ranges[param_i, 1] / self._x, param_ind=param_i)
+            elif k & 0xff in hotkeys['high']['down']:
+                self.set_param_max(max_val=self._param_ranges[param_i, 1] - param_distance * self._x, param_ind=param_i)
+                rv = self._param_ranges
+            elif k & 0xff in hotkeys['low']['up']:
+                self.set_param_min(min_val=self._param_ranges[param_i, 0] + param_distance * self._x, param_ind=param_i)
+                rv = self._param_ranges
+            elif k & 0xff in hotkeys['low']['down']:
+                self.set_param_min(min_val=self._param_ranges[param_i, 0] - param_distance * self._x, param_ind=param_i)
                 rv = self._param_ranges
         return rv
 
@@ -151,6 +180,13 @@ class Grid(metaclass=ABCMeta):
             raise Exception("Tried to set param max below param min.")
 
         self._param_ranges[param_ind][1] = max_val
+        self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+        self._calc_ticks()
+
+    def set_param_min(self, min_val, param_ind):
+        if min_val >= self._param_ranges[param_ind, 1]:
+            raise Exception("Tried to set param min above param max.")
+        self._param_ranges[param_ind, 0] = min_val
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
         self._calc_ticks()
 
