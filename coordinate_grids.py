@@ -47,25 +47,27 @@ class Grid(metaclass=ABCMeta):
     TITLE_OPACITY = 0.33
 
     HOTKEYS = [
-        # param 0 / h-axis,
-        {'low': {'up': [ord('p')],
+        {'name': 'horizontal',
+         'low': {'up': [ord('p')],
                  'down': [ord('o')]},
          'high': {'up': [ord(']')],
                   'down': [ord('[')]}},
 
-        # param 1 / v-axis,
-        {'low': {'up': [ord('k')],  # param 1, v-axis
+        {'name': 'vertical',
+         'low': {'up': [ord('k')],  # param 1, v-axis
                  'down': [ord(',')]},
          'high': {'up': [ord('8')],
                   'down': [ord('i')]}}]
 
+
     def print_hotkeys(self):
         print("\n\n-------------\nHotkeys:\n")
         for param_i in range(len(Grid.HOTKEYS)):
-            print("\tAxis %s: " % (param_i,))
-            for which_end in ['low', 'high']:
+            axis_name = Grid.HOTKEYS[param_i]['name'] if self._axis_labels[param_i] is None else self._axis_labels[param_i]
+            print("    Axis:  %s" % (axis_name,))
+            for which_end in ['high','low']:
                 for which_way in ['up', 'down']:
-                    print("\t\t\t%s end %s:  %s" % (which_end,
+                    print("        %s end %s:  %s" % (which_end,
                                                     which_way,
                                                     ", ".join(["%s" % (chr(x),)
                                                                for x in Grid.HOTKEYS[param_i][which_end][which_way]])))
@@ -91,7 +93,6 @@ class Grid(metaclass=ABCMeta):
         :param expansion_speed:  How fast to grow/shrink when user wants to reshape grid
         :param adjustability: (horizontal, vertical)
         """
-        self.print_hotkeys()
         self._title = None
         self._adjustability = adjustability
         # use defaults where not specified
@@ -101,6 +102,7 @@ class Grid(metaclass=ABCMeta):
         self._axis_labels = axis_labels
         self._param_ranges = np.array(param_ranges)
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+        self.print_hotkeys()
 
         self._minors, self._minors_unlabeled = minor_ticks, minor_unlabeled_ticks
         self._bbox = bbox
