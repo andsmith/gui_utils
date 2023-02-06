@@ -201,9 +201,10 @@ class Grid(metaclass=ABCMeta):
                 (min_val is None and max_val <= self._param_ranges[param_ind, 0]) or \
                 (max_val is None and min_val >= self._param_ranges[param_ind, 1]) or \
                 (max_val is not None and min_val is not None and max_val <= min_val):
-            raise Exception("Tried to set invalid range:  updating %s with %s" % (
-                self._param_ranges[param_ind, :],
-                (min_val, max_val)))
+            raise Exception("Tried to set invalid range for param %i:  updating %s with %s" % (param_ind,
+                                                                                               self._param_ranges[
+                                                                                               param_ind, :],
+                                                                                               (min_val, max_val)))
         if min_val is not None:
             self._param_ranges[param_ind, 0] = min_val
         if max_val is not None:
@@ -370,10 +371,10 @@ class Grid(metaclass=ABCMeta):
         """
         helper to draw common elements
         """
-        # background
-        draw_rect(image, self._bbox['left'], self._bbox['top'],
-                  self._size[0], self._size[1],
-                  self._colors['bkg'])
+        if self._colors['bkg'] is not None:
+            draw_rect(image, self._bbox['left'], self._bbox['top'],
+                      self._size[0], self._size[1],
+                      self._colors['bkg'])
         # box
         if self._props['draw_bounding_box']:
             draw_box(image, self._bbox, thickness=self._props['line_thicknesses']['medium'],
@@ -467,14 +468,15 @@ class CartesianGrid(Grid):
             2. spanning whole range, but not too close to edges
         """
 
-        high_margin_frac = 0.1  # don't put tics within this fraction of the high end of the range
+        high_margin_frac = 0.1  # don't put tics within this fraction of the high end of the range (room for axis label)
         low_margin_frac = 0.01  # don't put tics within this fraction of zero
 
         # calc  step size, at least 10 ticks of minor order
 
-        def _calc(low, high, is_vertical):
+        def _calc(low, high, is_vertical, is_labeled):
             span = high - low
-            margin = {'high': (high_margin_frac * span),
+            hmf = high_margin_frac if is_labeled else 0.01
+            margin = {'high': (hmf * span),
                       'low': (low_margin_frac * span)}
             span_order = np.log10(span)
 
@@ -562,10 +564,13 @@ class CartesianGrid(Grid):
                     'minor_labeled': minor_labels,
                     'minor_unlabeled': unlabeled_minor_ticks}
 
-        self._param_ticks = [_calc(p_range[0], p_range[1], vert)
-                             for p_range, vert in zip([self._param_ranges[0, :],
-                                                       self._param_ranges[1, :]],
-                                                      (False, True))]
+        axes_labeled = [lab is not None for lab in self._axis_labels]
+
+        self._param_ticks = [_calc(p_range[0], p_range[1], vert, is_labeled)
+                             for p_range, vert, is_labeled in zip([self._param_ranges[0, :],
+                                                                   self._param_ranges[1, :]],
+                                                                  (False, True),
+                                                                  axes_labeled)]
 
 
 def _test_conversions(grid, size):
