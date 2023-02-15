@@ -46,7 +46,8 @@ class Grid(metaclass=ABCMeta):
                            'title': _rgb_to_bgra(RGB_COLORS['gray'], 255), }
     TITLE_OPACITY = 0.33
 
-    HOTKEYS = {'param_ranges': [{'name': 'horizontal',
+
+    DEFAULT_HOTKEYS = {'param_ranges': [{'name': 'horizontal',
                                  'low': {'up': [ord('p')],
                                          'down': [ord('o')]},
                                  'high': {'up': [ord(']')],
@@ -57,15 +58,15 @@ class Grid(metaclass=ABCMeta):
                                          'down': [ord(',')]},
                                  'high': {'up': [ord('8')],
                                           'down': [ord('i')]}}],
-               'center': ord('c')}
+                       'center': ord('c')}
 
     def print_hotkeys(self):
         print("\n\n-------------\nHotkeys:\n")
-        for hotkey in Grid.HOTKEYS:
+        for hotkey in self._hotkeys:
             if hotkey != 'param_ranges':
-                print("    %s:  %s" % (hotkey, Grid.HOTKEYS[hotkey]))
-        for param_i in range(len(Grid.HOTKEYS['param_ranges'])):
-            axis_name = Grid.HOTKEYS['param_ranges'][param_i]['name'] if self._axis_labels[param_i] is None else \
+                print("    %s:  %s" % (hotkey, self._hotkeys[hotkey]))
+        for param_i in range(len(self._hotkeys['param_ranges'])):
+            axis_name = self._hotkeys['param_ranges'][param_i]['name'] if self._axis_labels[param_i] is None else \
                 self._axis_labels[
                     param_i]
             print("    Adjust axis:  %s" % (axis_name,))
@@ -75,7 +76,7 @@ class Grid(metaclass=ABCMeta):
                                                       which_way,
                                                       ", ".join(["%s" % (chr(x),)
                                                                  for x in
-                                                                 Grid.HOTKEYS['param_ranges'][param_i][which_end][
+                                                                 self._hotkeys['param_ranges'][param_i][which_end][
                                                                      which_way]])))
                 print("")
 
@@ -89,7 +90,8 @@ class Grid(metaclass=ABCMeta):
                  axis_labels=('x', 'y'),
                  minor_ticks=True,
                  minor_unlabeled_ticks=True,
-                 adjustability=(True, True)):
+                 adjustibility=((True, True), (True,True)),
+                 hotkeys=None):
         """
         Initialize a new grid.
         :param bbox: dict with 'top','bottom','left','right', where in image is the grid region
@@ -97,10 +99,11 @@ class Grid(metaclass=ABCMeta):
         :param colors:  Dict with RGB or RGBA values, {'heavy','light','bkg','title'}
         :param draw_props:  dict with info for drawing (see DEFAULT_DRAW_PROPS)
         :param expansion_speed:  How fast to grow/shrink when user wants to reshape grid
-        :param adjustability: (horizontal, vertical)
+        :param adjustibility: (horizontal(lower, higher), vertical(lower, higher))
+        :param hotkeys: list, same structre as DEFAULT_HOTKEYS, partial OK 
         """
         self._title = None
-        self._adjustability = adjustability
+        self._adjustibility = adjustibility
         # use defaults where not specified
         self._props = Grid.DEFAULT_DRAW_PROPS.copy()
         self._props.update({} if draw_props is None else draw_props)
@@ -108,6 +111,18 @@ class Grid(metaclass=ABCMeta):
         self._axis_labels = axis_labels
         self._param_ranges = np.array(param_ranges)
         self._param_spans = self._param_ranges[:, 1] - self._param_ranges[:, 0]
+        
+        self._hotkeys = Grid.DEFAULT_HOTKEYS.copy()
+        if hotkeys is not None:
+            # if they are axis related
+            if 'param_ranges' in hotkeys:
+                for param_ind, hotkey_info in enumerate(hotkeys['param_ranges']):
+                    for end in hotkey_info:
+                        for direction in hotkey_info[end]: 
+                            self._hotkeys['param_ranges'][param_i][end][direction] = hotkeys[end][direction]
+            # everything else
+            non_param_ranges_keys = {k: hotkeys[k] for k in hotkeys if k!='param_ranges'}
+            self._hotkeys.update(non_param_ranges_keys)
 
         self._minors, self._minors_unlabeled = minor_ticks, minor_unlabeled_ticks
         self._bbox = bbox
@@ -161,33 +176,30 @@ class Grid(metaclass=ABCMeta):
         """
         rv = None
 
-        if k & 0xff == Grid.HOTKEYS['center']:
+
+        if k & 0xff == self._hotkeys['center']:
+            
             for param_i in range(2):
                 new_low, new_high = self._marker_pos_grid[param_i] - self._param_spans[param_i] / 2, \
                                     self._marker_pos_grid[param_i] + self._param_spans[param_i] / 2
-
-                self.set_param_range(param_i, min_val=new_low, max_val=new_high)
-                rv = self._param_ranges
+                
         else:
-            for param_i, hotkeys in enumerate(Grid.HOTKEYS['param_ranges']):
-                if not self._adjustability[param_i]:
-                    continue
-
-                if k & 0xff in hotkeys['high']['up']:
-                    self.set_param_range(param_i,
-                                         max_val=self._param_ranges[param_i, 1] + self._param_spans[param_i] * self._x)
+            
+            for param_i in range(2):
+                if k & 0xff in self._hotkeys['param_ranges'][param_i]['high']['up'] and self._adjustibility[param_i][1]:
+                    self.set_param_range(param_i, max_val=self._param_ranges[param_i, 1] + self._param_spans[param_i] * self._x)
                     rv = self._param_ranges
-                elif k & 0xff in hotkeys['high']['down']:
-                    self.set_param_range(param_i,
-                                         max_val=self._param_ranges[param_i, 1] - self._param_spans[param_i] * self._x)
+                
+                elif k & 0xff in self._hotkeys['param_ranges'][param_i]['high']['down'] and self._adjustibility[param_i][1]:
+                    self.set_param_range(param_i, max_val=self._param_ranges[param_i, 1] - self._param_spans[param_i] * self._x)
                     rv = self._param_ranges
-                elif k & 0xff in hotkeys['low']['up']:
-                    self.set_param_range(param_i,
-                                         min_val=self._param_ranges[param_i, 0] + self._param_spans[param_i] * self._x)
+                
+                elif k & 0xff in self._hotkeys['param_ranges'][param_i]['low']['up'] and self._adjustibility[param_i][0]:
+                    self.set_param_range(param_i, min_val=self._param_ranges[param_i, 0] + self._param_spans[param_i] * self._x)
                     rv = self._param_ranges
-                elif k & 0xff in hotkeys['low']['down']:
-                    self.set_param_range(param_i,
-                                         min_val=self._param_ranges[param_i, 0] - self._param_spans[param_i] * self._x)
+                
+                elif k & 0xff in self._hotkeys['param_ranges'][param_i]['low']['down'] and self._adjustibility[param_i][0]:
+                    self.set_param_range(param_i, min_val=self._param_ranges[param_i, 0] - self._param_spans[param_i] * self._x)
                     rv = self._param_ranges
 
         return rv
