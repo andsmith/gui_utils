@@ -19,7 +19,6 @@ def _scale_unit_coords(coords, shape):
     scale = np.array([shape[1], shape[0]]).reshape(1, 2)
     flipped = np.hstack((coords[:, 0].reshape(-1, 1),
                          1.0 - coords[:, 1].reshape(-1, 1)))
-    print(coords.shape, flipped.shape)
     return flipped * scale
 
 
@@ -33,7 +32,7 @@ class DrawableComponent(object):
     PRECISION_MULT = 2. ** PRECISION_BITS
     LINE_TYPE = cv2.LINE_AA
 
-    def __init__(self, coords, draw_color=None, is_closed=False, fill_color=None, thickness=1, name=""):
+    def __init__(self, coords, colors, is_closed=False, thickness=1, name=""):
         """
         Roughly, arguments of cv2.draw_polylines.
 
@@ -41,17 +40,20 @@ class DrawableComponent(object):
         part of the figure rendering, not the component definition)
 
         :param coords:  N x 2 array, outline of shape,  relative to [0, 1] x [0, 1], origin at bottom right.
-        :param draw_color:    1, 3 or 4 element (rgb, etc.), or NONE if not drawing border/line
-            default to be used if alt is not specified at render time.
+        :param colors:   dict(draw=val, filll=val) where val can be 1, 3 or 4 element (rgb, etc.),
+            or set draw_color=None for no outline / fill_color=None only outline / non-closed figures
+            These are only default, can be overridden in call to DrawableComponent.draw().
         :param is_closed:  Connect first and last coords?  (ignored, set to True if fill_color provided)
-        :param fill_color:  same, or NONE if not drawing filled.  (same default behavior as draw_color)
         :param thickness:  line thickness, or None if not drawing border/line
         """
+        self._colors = colors
         self._coords = np.array(coords)
-        self._is_closed = is_closed if fill_color is None else True
+        self._is_closed = is_closed if self._colors['fill'] is None else True
         self._thickness = thickness
-        self._draw_color, self._fill_color = draw_color, fill_color
         self._name = name
+
+        if 'draw' in colors and 'fill' in colors and colors['draw'] is None and colors['fill'] is None:
+            raise Exception("Need at least one of the 'draw' and 'fill' values for color.")
 
         if not self._is_closed:
             if self._thickness is None:
@@ -62,22 +64,22 @@ class DrawableComponent(object):
         if x_min < 0.0 or x_max > 1.0 or y_min < 0.0 or y_max > 1.0:
             raise Exception("Need coordinates within unit square")
 
-        self._draw_line = draw_color is not None
-        self._draw_interior = fill_color is not None
+        self._draw_line = self._colors['draw'] is not None
+        self._draw_interior = self._colors['fill'] is not None
 
         if not self._draw_line and not self._draw_interior:
             raise Exception("Inconsistent border/color/closed arguments")
 
-    def draw(self, image, draw_color=None, fill_color=None):
+    def draw(self, image, color_updates=None):
         """
         render to an image
         :param image: draw component on this image
-        :param draw_color: Substitute this color for the figure outline
-        :param fill_color: Substitute this color for the figure interior (if filled)
+        :param color_updates: dict with 'draw', and/or 'fill', or NONE for defaults
         :return:
         """
-        draw_color = draw_color if draw_color is not None else self._draw_color
-        fill_color = fill_color if fill_color is not None else self._fill_color
+        color_updates = color_updates if color_updates is not None else {}
+        colors = self._colors.copy()
+        colors.update(color_updates)
 
         scaled_coords = _scale_unit_coords(self._coords, image.shape)
 
@@ -86,11 +88,11 @@ class DrawableComponent(object):
 
         if self._draw_interior:
             line_type = DrawableComponent.LINE_TYPE if not self._draw_line else cv2.LINE_8
-            cv2.fillPoly(image, [pts], fill_color[:3],
+            cv2.fillPoly(image, [pts], colors['fill'],
                          line_type, DrawableComponent.PRECISION_BITS)
 
         if self._draw_line:
-            cv2.polylines(image, [pts], self._is_closed, draw_color, self._thickness,
+            cv2.polylines(image, [pts], self._is_closed, colors['draw'], self._thickness,
                           DrawableComponent.LINE_TYPE, DrawableComponent.PRECISION_BITS)
 
     def get_name(self):
@@ -104,7 +106,7 @@ class Artist(object, metaclass=ABCMeta):
     Use by inheriting from this class or one of its subclasses.
     """
 
-    def __init__(self, bkg_color=(255, 255, 255, 0)):
+    def __init__(self, bkg_color):
         """
         Initialize an icon/cursor/sprite, etc.
         """
@@ -132,10 +134,11 @@ class Artist(object, metaclass=ABCMeta):
         :return:  image,
         (x,y) ctrl point
         """
+        color_substitutions = color_substitutions if color_substitutions is not None else {}
         img = self._get_blank(shape)
         for comp in self._components:
-            color_subs = getattr(color_substitutions, comp.get_name(), dict(fill_color=None, draw_color=None))
-            comp.draw(img, **color_subs)
+            color_subs = color_substitutions.get(comp.get_name(), None)
+            comp.draw(img, color_updates=color_subs)
 
         return img
 
@@ -163,6 +166,7 @@ class SpriteArtist(Artist):
         :return:  image,j
           control (control point x,y within that image)
         """
+
         img = super(SpriteArtist, self).make(shape, color_substitutions)
         control_xy = _scale_unit_coords(self._control_xy, img.shape)
 
@@ -182,7 +186,6 @@ class SpriteArtist(Artist):
         """
         n_c_channels = self._bkg_color.size
         bkg = np.array(self._bkg_color, dtype=np.uint8)
-        # print(image[:,:,].shape, bkg[None, None,:].shape)
         matching = image == bkg  # places where image matches color
 
         matching = np.sum(matching, axis=2) == n_c_channels  # match all channels (incl. alpha)

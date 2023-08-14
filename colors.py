@@ -1,5 +1,3 @@
-
-
 RGB_COLORS = dict(
     # for UI
     black=(8, 8, 8),
@@ -31,9 +29,17 @@ RGB_COLORS = dict(
     brown=(165, 42, 42),
     purple=(100, 0, 235))
 
+BW_COLORS = {'med_light': 200,
+             'light': 223,
+             'med': 150,
+             'med_dark': 120,
+             'dark': 90,
+             'black': 8,
+             'off_black': 16}
+
+
 def add_alpha(color, alpha):
     return color[0], color[1], color[2], alpha
-
 
 
 RGBA_COLORS_OPAQUE = {k: add_alpha(RGB_COLORS[k], 255) for k in RGB_COLORS}
