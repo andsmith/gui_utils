@@ -50,7 +50,7 @@ class DrawableComponent(object):
         if not self._draw_line and not self._draw_interior:
             raise Exception("Inconsistent border/color/closed arguments")
 
-    def _get_scaled_coords(self, shape):
+    def get_scaled_coords(self, shape):
         """
         Unit square coordinates -> image pixel coordinates.
         :param shape:  image H x W
@@ -71,7 +71,7 @@ class DrawableComponent(object):
         draw_color = draw_color if draw_color is not None else self._draw_color
         fill_color = fill_color if fill_color is not None else self._fill_color
 
-        coords = (self._get_scaled_coords(image.shape) * DrawableComponent.PRECISION_MULT).astype(np.int32)
+        coords = (self.get_scaled_coords(image.shape) * DrawableComponent.PRECISION_MULT).astype(np.int32)
         pts = coords.reshape((-1, 1, 2))
 
         if self._draw_interior:
@@ -82,53 +82,75 @@ class DrawableComponent(object):
             cv2.polylines(image, [pts], self._is_closed, draw_color, self._thickness,
                           DrawableComponent.LINE_TYPE, DrawableComponent.PRECISION_BITS)
 
+    def get_name(self):
+        return self._name
 
-class Figure(object, metaclass=ABCMeta):
+
+class Figure(object):
     """
     Generic base class for small images.
     """
 
-    def __init__(self, components, center_xy=None,  bkg_color=(255, 255, 255, 0)):
+    def __init__(self, components, bkg_color=(255, 255, 255, 0)):
         """
         Initialize an icon/cursor/sprite, etc.
         :param components:  list of DrawableComponent objects.
-        :param center_xy:  x, y coordinate of "center point" of figure, wrt coordinates  (in unit square)
-        :param tight_borders:  Once figure is drawn, shrink the image until no edge contains only bkg_color.
-            (automatically adjusts center point)
         """
         self._components = components
-        self._center = center_xy
         self._bkg_color = bkg_color
 
     def _get_blank(self, shape):
-        return np.zeros((shape[0], shape[1], 3),
-                        dtype=np.uint8) + self._bkg_color.reshape((1, 1, -1))
+        return np.zeros(shape, dtype=np.uint8) + self._bkg_color.reshape((1, 1, -1))
 
-    def make(self, side_length, color_substitutions = None):
+    def make(self, shape, color_substitutions=None):
         """
         Render the figure into a new image.
-        :param side_length:  size of the image (max size if tight_borders)
-        :param color_substitutions:  dict(component_name: color, ...)
+        :param shape:  image shape (H x W x Colors)
+        :param color_substitutions:  dict(component_name: {fill_color=new_color/None,
+                                                           border_color=new_color/None},
+                                          ...)
         :return:  image,
         (x,y) center point
         """
-        shape = side_length, side_length
         img = self._get_blank(shape)
         for comp in self._components:
-            comp.draw(img)
+            color_subs = getattr(color_substitutions, comp.get_name(), dict(fill_color=None, border_color=None))
+            comp.draw(img, **color_subs)
 
-class Sprite()
-        if self._tight_borders:
-            img, center = self._prune_image_sides(img, self._center)
+        return img
 
 
-    def prune_image_sides(self, image):
+
+
+class Sprite(Figure):
+    """
+    Borderless figure with precise "center point".
+    """
+
+    def __init__(self, components, center_xy, trim_edges=True, *args, **kwargs):
+        super(Sprite, self).__init__(components, *args, **kwargs)
+        self._center = center_xy
+        self._trim = trim_edges
+
+    def make(self, shape, color_substitutions=None):
+        img = super(Sprite, self).make(shape, color_substitutions)
+        scale = np.array([shape[1], shape[0]]).reshape(1, 2)
+
+        center_xy = self._center * scale
+
+        if self._trim:
+            img, center_offset = self._prune_image_sides(img)
+            center_xy -= np.array(center_offset).reshape(1,2)
+
+        return img, center_xy
+
+    def _prune_image_sides(self, image):
         """
         Remove rows/columns at edges of image if they match background color.
         :param image:  image to prune HxWxd or HxWxd, uint8
         :bkg color: d-element uint8
         :returns:  hxwxd image, where h<=H and w<=W, and each of the four edge-rows of pixels is not just background color.
-             (n_left_cols_removed, n_top_rows_removed)
+             (n_left_cols_removed, n_top_rows_removed), i.e. the x,y offset for all (pixel) coords
         """
         n_c_channels = len(self._bkg_color)
         bkg = np.array(self._bkg_color, dtype=np.uint8)
