@@ -3,17 +3,37 @@ from abc import abstractmethod, ABCMeta
 import numpy as np
 
 
+def _scale_unit_coords(coords, shape):
+    """
+    Get absolute coordinates, scaled to given image.
+    Do not preserve aspect ratio.
+    Flip y-axis.
+
+    :param shape:  N x 2, xy coords in unit square
+    :param shape:  HxWxC, i.e. shape of image
+    :return:  N x 2 float array, scaled
+    """
+
+    coords = np.array(coords).reshape(-1, 2)
+
+    scale = np.array([shape[1], shape[0]]).reshape(1, 2)
+    flipped = np.hstack((coords[:, 0].reshape(-1, 1),
+                         1.0 - coords[:, 1].reshape(-1, 1)))
+    print(coords.shape, flipped.shape)
+    return flipped * scale
+
+
 class DrawableComponent(object):
     """
     Draw a small element of an image.
     Line, shape, etc.
 
     """
-    PRECISION_BITS = 6
+    PRECISION_BITS = 0
     PRECISION_MULT = 2. ** PRECISION_BITS
     LINE_TYPE = cv2.LINE_AA
 
-    def __init__(self, coords, draw_color, is_closed=False, fill_color=None, thickness=1, name=""):
+    def __init__(self, coords, draw_color=None, is_closed=False, fill_color=None, thickness=1, name=""):
         """
         Roughly, arguments of cv2.draw_polylines.
 
@@ -23,19 +43,17 @@ class DrawableComponent(object):
         :param coords:  N x 2 array, outline of shape,  relative to [0, 1] x [0, 1], origin at bottom right.
         :param draw_color:    1, 3 or 4 element (rgb, etc.), or NONE if not drawing border/line
             default to be used if alt is not specified at render time.
-        :param is_closed:  Connect first and last coords?
+        :param is_closed:  Connect first and last coords?  (ignored, set to True if fill_color provided)
         :param fill_color:  same, or NONE if not drawing filled.  (same default behavior as draw_color)
         :param thickness:  line thickness, or None if not drawing border/line
         """
-        self._coords = coords
-        self._is_closed = is_closed
+        self._coords = np.array(coords)
+        self._is_closed = is_closed if fill_color is None else True
         self._thickness = thickness
         self._draw_color, self._fill_color = draw_color, fill_color
         self._name = name
 
         if not self._is_closed:
-            if self._fill_color is not None:
-                raise Exception("Fill color provided for non-closed figure.")
             if self._thickness is None:
                 raise Exception("Line thickness must be given for non-closed figures")
 
@@ -50,16 +68,6 @@ class DrawableComponent(object):
         if not self._draw_line and not self._draw_interior:
             raise Exception("Inconsistent border/color/closed arguments")
 
-    def get_scaled_coords(self, shape):
-        """
-        Unit square coordinates -> image pixel coordinates.
-        :param shape:  image H x W
-        :return:  pixel_coords, N x 2 array of floats
-            pixel_center, 1 x 2 array
-        """
-        scale = np.array([shape[1], shape[0]]).reshape(1, 2)
-        return self._coords * scale
-
     def draw(self, image, draw_color=None, fill_color=None):
         """
         render to an image
@@ -71,12 +79,15 @@ class DrawableComponent(object):
         draw_color = draw_color if draw_color is not None else self._draw_color
         fill_color = fill_color if fill_color is not None else self._fill_color
 
-        coords = (self.get_scaled_coords(image.shape) * DrawableComponent.PRECISION_MULT).astype(np.int32)
+        scaled_coords = _scale_unit_coords(self._coords, image.shape)
+
+        coords = (scaled_coords * DrawableComponent.PRECISION_MULT).astype(np.int32)
         pts = coords.reshape((-1, 1, 2))
 
         if self._draw_interior:
+            line_type = DrawableComponent.LINE_TYPE if not self._draw_line else cv2.LINE_8
             cv2.fillPoly(image, [pts], fill_color[:3],
-                         DrawableComponent.LINE_TYPE, DrawableComponent.PRECISION_BITS)
+                         line_type, DrawableComponent.PRECISION_BITS)
 
         if self._draw_line:
             cv2.polylines(image, [pts], self._is_closed, draw_color, self._thickness,
@@ -86,63 +97,80 @@ class DrawableComponent(object):
         return self._name
 
 
-class Figure(object):
+class Artist(object, metaclass=ABCMeta):
     """
-    Generic base class for small images.
+    Generic  class for small images.
+
+    Use by inheriting from this class or one of its subclasses.
     """
 
-    def __init__(self, components, bkg_color=(255, 255, 255, 0)):
+    def __init__(self, bkg_color=(255, 255, 255, 0)):
         """
         Initialize an icon/cursor/sprite, etc.
-        :param components:  list of DrawableComponent objects.
         """
-        self._components = components
-        self._bkg_color = bkg_color
+        self._bkg_color = np.array(bkg_color, dtype=np.uint8).reshape((1, 1, -1))
+        self._components = self._get_components()
+
+    @abstractmethod
+    def _get_components(self):
+        """
+        :return: list of DrawableComponent objects.
+        Set figure definitions here.   (see test_figure_drawing.py for an example)
+        """
+        pass
 
     def _get_blank(self, shape):
-        return np.zeros(shape, dtype=np.uint8) + self._bkg_color.reshape((1, 1, -1))
+        return np.zeros((shape[0], shape[1], len(self._bkg_color)), dtype=np.uint8) + self._bkg_color
 
     def make(self, shape, color_substitutions=None):
         """
         Render the figure into a new image.
         :param shape:  image shape (H x W x Colors)
         :param color_substitutions:  dict(component_name: {fill_color=new_color/None,
-                                                           border_color=new_color/None},
+                                                           draw_color=new_color/None},
                                           ...)
         :return:  image,
-        (x,y) center point
+        (x,y) ctrl point
         """
         img = self._get_blank(shape)
         for comp in self._components:
-            color_subs = getattr(color_substitutions, comp.get_name(), dict(fill_color=None, border_color=None))
+            color_subs = getattr(color_substitutions, comp.get_name(), dict(fill_color=None, draw_color=None))
             comp.draw(img, **color_subs)
 
         return img
 
 
-
-
-class Sprite(Figure):
+class SpriteArtist(Artist):
     """
-    Borderless figure with precise "center point".
+    Borderless figure with single "control point".
     """
 
-    def __init__(self, components, center_xy, trim_edges=True, *args, **kwargs):
-        super(Sprite, self).__init__(components, *args, **kwargs)
-        self._center = center_xy
+    def __init__(self, trim_edges=True, *args, **kwargs):
+        super(SpriteArtist, self).__init__(*args, **kwargs)
+        self._control_xy = np.array(self._get_control_xy()).reshape(-1)
         self._trim = trim_edges
 
-    def make(self, shape, color_substitutions=None):
-        img = super(Sprite, self).make(shape, color_substitutions)
-        scale = np.array([shape[1], shape[0]]).reshape(1, 2)
+    @abstractmethod
+    def _get_control_xy(self):
+        """
+        Get the reference point of the figure, wrt unit square.
+        :return:  (x, y) in [0,1]x[0,1]
+        """
 
-        center_xy = self._center * scale
+    def make(self, shape, color_substitutions=None):
+        """
+        Same params as Artist.make()
+        :return:  image,j
+          control (control point x,y within that image)
+        """
+        img = super(SpriteArtist, self).make(shape, color_substitutions)
+        control_xy = _scale_unit_coords(self._control_xy, img.shape)
 
         if self._trim:
-            img, center_offset = self._prune_image_sides(img)
-            center_xy -= np.array(center_offset).reshape(1,2)
+            img, offset = self._prune_image_sides(img)
+            control_xy -= offset
 
-        return img, center_xy
+        return img, control_xy.reshape(-1)
 
     def _prune_image_sides(self, image):
         """
@@ -152,9 +180,10 @@ class Sprite(Figure):
         :returns:  hxwxd image, where h<=H and w<=W, and each of the four edge-rows of pixels is not just background color.
              (n_left_cols_removed, n_top_rows_removed), i.e. the x,y offset for all (pixel) coords
         """
-        n_c_channels = len(self._bkg_color)
+        n_c_channels = self._bkg_color.size
         bkg = np.array(self._bkg_color, dtype=np.uint8)
-        matching = image[:, :, ] == bkg[None, None, :]  # places where image matches color
+        # print(image[:,:,].shape, bkg[None, None,:].shape)
+        matching = image == bkg  # places where image matches color
 
         matching = np.sum(matching, axis=2) == n_c_channels  # match all channels (incl. alpha)
 
