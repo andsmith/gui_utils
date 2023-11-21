@@ -10,8 +10,8 @@ from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 
-from .camera_settings   import user_pick_resolution, count_cameras
-from  .gui_picker   import choose_item_text, ChooseItemDialog
+from .camera_settings import user_pick_resolution, count_cameras
+from .gui_picker import choose_item_text, ChooseItemDialog
 
 
 def get_cv2_prop_names():
@@ -25,8 +25,10 @@ class ShutdownException(Exception):
 
 class Camera(object):
     _PROPS = get_cv2_prop_names()
+    WIDTH_FLAG = cv2.CAP_PROP_FRAME_WIDTH
+    HEIGHT_FLAG = cv2.CAP_PROP_FRAME_HEIGHT
 
-    def __init__(self, cam_ind, callback, settings=None, prompt_resolution=False, mirror=True):
+    def __init__(self, cam_ind, callback=None, settings=None, prompt_resolution=False, mirror=True):
         """
         Webcam wrapper.  If user is asked for resolution, don't return until then.
 
@@ -46,18 +48,23 @@ class Camera(object):
         self._cam_thread = Thread(target=self._cam_thread_proc)
         self._callback = callback
 
-        self._settings = settings if settings is not None else {}
+        self._settings = {}
         self._settings_lock = Lock()  # need to be set in same thread as camera
-        self._settings_changes_q = Queue()  # each should be a dict with one setting--value pair
+        self._settings_changes_q = Queue()  # each should be a dict with setting--value pairs
+        if settings is not None:
+            self._settings_changes_q.put(settings)
+            logging.info("%i settings queued to be applied." % (len(settings),))
         self._resolution = None
-        self._target_resolution = None
+
         if prompt_resolution:
             resolution = user_pick_resolution(self._cam_ind)
             if resolution is None:
                 self.shutdown()
                 logging.info("User exit.")
                 raise ShutdownException()
-            self._target_resolution = resolution
+            width, height = resolution
+            self._settings_changes_q.put({Camera.WIDTH_FLAG: width,
+                                          Camera.HEIGHT_FLAG: height})
 
     def start(self):
         if self._started:
@@ -69,6 +76,9 @@ class Camera(object):
         logging.info("Camera got shutdown signal")
         self._shutdown = True
 
+    def set_callback(self, new_callback=None):
+        self._callback = new_callback
+
     def get_resolution(self, wait=False):
         while wait and self._resolution is None:
             logging.info("Waiting for camera to start...")
@@ -78,14 +88,11 @@ class Camera(object):
     def set_resolution(self, target_resolution=None):
         """
         Add settings changes to queue (should happen in camera thread to be safe).
-       """
+        """
         if target_resolution is not None:
             width, height = target_resolution
-            self._settings_changes_q.put({cv2.CAP_PROP_FRAME_WIDTH: width})
-            self._settings_changes_q.put({cv2.CAP_PROP_FRAME_HEIGHT: height})
-            self._resolution = tuple(np.int64(target_resolution))  # not effective immediately
-
-            logging.info("Resolution change added to settings change queue:  %i x %i" % target_resolution)
+            self._settings_changes_q.put({Camera.WIDTH_FLAG: width,
+                                          Camera.HEIGHT_FLAG: height})
         else:
             logging.info("No target resolution, camera not changed.")
 
@@ -120,15 +127,10 @@ class Camera(object):
         else:
             cam = cv2.VideoCapture(self._cam_ind)
         logging.info("Camera %i acquired." % (self._cam_ind,))
+        self._apply_settings(cam)
 
-        if self._target_resolution is not None:
-            self.set_resolution(self._target_resolution)
-            self._apply_settings(cam)
-        self._resolution = tuple(np.int64([cam.get(cv2.CAP_PROP_FRAME_WIDTH),
-                                           cam.get(cv2.CAP_PROP_FRAME_HEIGHT)]))
-        logging.info("\tresolution:   %s x %s" % (self._resolution[0], self._resolution[1]))
         fps = cam.get(cv2.CAP_PROP_FPS)
-        logging.info("\tFPS:  %s" % (fps,))
+        logging.info("\tDevice FPS:  %s" % (fps,))
 
         return cam
 
@@ -155,7 +157,8 @@ class Camera(object):
                 frame = np.ascontiguousarray(frame[:, ::-1, :])
             else:
                 frame = np.ascontiguousarray(frame)  # mirror image, not real image
-            self._callback(frame, frame_time)
+            if self._callback is not None:
+                self._callback(frame, frame_time)
 
         logging.info("Camera:  releasing device...")
         cam.release()
@@ -179,7 +182,7 @@ def pick_camera(gui=True):
                    'camera 1 (probably forward-facing)']
         choices.extend(["camera %i" % (ind + 2,) for ind in range(n_cams - 2)])
         if gui:
-            chooser = cam_ind = ChooseItemDialog(prompt=prompt)
+            chooser = ChooseItemDialog(prompt=prompt)
             cam_ind = chooser.ask_text(choices)
         else:
             cam_ind = choose_item_text(choices, prompt)
@@ -187,3 +190,4 @@ def pick_camera(gui=True):
             raise Exception("User selected no camera.")
         print("Chose", cam_ind)
     return cam_ind
+
