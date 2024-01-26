@@ -75,12 +75,14 @@ def probe_resolutions(resolutions, cam_index):
     """
 
     def _test(w, h):
-        # print("\tprobing %i x %i ..." % (w, h))
+        print("\tprobing %i x %i ..." % (w, h))
         cam.set(cv2.CAP_PROP_FRAME_WIDTH, w)
         cam.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
         width = cam.get(cv2.CAP_PROP_FRAME_WIDTH)
         height = cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        return width == w and height == h
+        val = width == w and height == h
+        print("\t%s" % (val,))
+        return val
 
     logging.info("Probing camera %i ..." % (cam_index,))
     cam = cv2.VideoCapture(cam_index)  # don't use cv2.CAP_DSHOW here, it's way slower
@@ -114,7 +116,7 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
     if gui:
         selection = ChooseItemDialog(prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
     else:
-        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:",choices=choices)
+        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:", choices=choices)
 
     return valid['widths'][selection], valid['heights'][selection]
 

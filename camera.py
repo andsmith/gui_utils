@@ -115,8 +115,10 @@ class Camera(object):
 
         logging.info("Acquiring camera %i..." % (self._cam_ind,))
         if self._is_windows:
+            logging.info("\tWindows detected.")
             cam = cv2.VideoCapture(self._cam_ind, cv2.CAP_DSHOW)
         else:
+            logging.info("\tLinux detected.")
             cam = cv2.VideoCapture(self._cam_ind)
         logging.info("Camera %i acquired." % (self._cam_ind,))
 
