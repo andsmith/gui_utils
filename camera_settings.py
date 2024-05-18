@@ -12,7 +12,12 @@ import json
 import logging
 from .gui_picker import ChooseItemDialog, choose_item_text
 
-RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
+_RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
+
+
+def _get_cache_filename():
+    path, _ = os.path.split(__file__)
+    return os.path.join(path, _RESOLUTION_CACHE_FILENAME)
 
 
 def download_common_resolutions(save_file=None):
@@ -60,7 +65,7 @@ def get_common_resolutions(no_network=False):
     else:
         load_cache = True
     if load_cache:
-        with open(RESOLUTION_CACHE_FILENAME, 'r') as infile:
+        with open(_get_cache_filename(), 'r') as infile:
             resolutions = json.load(infile)
         logging.info("Loaded %i resolutions from cache." % (len(resolutions['widths']),))
     return resolutions
@@ -114,7 +119,7 @@ def user_pick_resolution(camera_index=0, no_network=False, gui=True):
     if gui:
         selection = ChooseItemDialog(prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
     else:
-        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:",choices=choices)
+        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:", choices=choices)
 
     return valid['widths'][selection], valid['heights'][selection]
 
