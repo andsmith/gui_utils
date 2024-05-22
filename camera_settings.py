@@ -11,6 +11,7 @@ import os
 import json
 import logging
 from .gui_picker import ChooseItemDialog, choose_item_text
+from .platform_deps import open_camera
 
 _RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
 
@@ -80,15 +81,17 @@ def probe_resolutions(resolutions, cam_index):
     """
 
     def _test(w, h):
-        # print("\tprobing %i x %i ..." % (w, h))
+        print("\tprobing %i x %i ..." % (w, h))
         cam.set(cv2.CAP_PROP_FRAME_WIDTH, w)
         cam.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
         width = cam.get(cv2.CAP_PROP_FRAME_WIDTH)
         height = cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        return width == w and height == h
+        worked = (width == w and height == h)
+        print("\t%s" % (worked,))
+        return worked
 
     logging.info("Probing camera %i ..." % (cam_index,))
-    cam = cv2.VideoCapture(cam_index)  # don't use cv2.CAP_DSHOW here, it's way slower
+    came = open_camera(cam_index)
     valid = [(w, h) for w, h in zip(resolutions['widths'], resolutions['heights']) if _test(w, h)]
     cam.release()
 
@@ -135,10 +138,7 @@ def count_cameras():
     c = None
     while True:
         try:
-            if os.name == 'nt':  # windows, to avoid warning
-                c = cv2.VideoCapture(n, cv2.CAP_DSHOW)
-            else:
-                c = cv2.VideoCapture(n)
+            c = open_camera(n)
             ret, frame = c.read()
             if frame.size < 10:
                 raise Exception("Out of cameras!")
