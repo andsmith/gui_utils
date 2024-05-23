@@ -1,5 +1,5 @@
 """
-Simple cv2 wrapper, using callback for incoming frames.
+Cv2 wrapper, using callback for incoming frames.
 """
 import cv2
 import time
@@ -9,9 +9,8 @@ import os
 from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
-
-from .camera_settings import user_pick_resolution, count_cameras
-from .gui_picker import choose_item_text, ChooseItemDialog
+from .platform_deps import open_camera
+from .camera_settings import user_pick_resolution
 
 
 def get_cv2_prop_names():
@@ -79,12 +78,6 @@ class Camera(object):
     def set_callback(self, new_callback=None):
         self._callback = new_callback
 
-    def get_resolution(self, wait=False):
-        while wait and self._resolution is None:
-            logging.info("Waiting for camera to start...")
-            time.sleep(0.2)
-        return self._resolution
-
     def set_resolution(self, target_resolution=None):
         """
         Add settings changes to queue (should happen in camera thread to be safe).
@@ -120,15 +113,9 @@ class Camera(object):
         Open current camera, apply settings, prompt user if necessary
         :return: VideoCapture() object
         """
-
         logging.info("Acquiring camera %i..." % (self._cam_ind,))
-        if self._is_windows:
-            cam = cv2.VideoCapture(self._cam_ind, cv2.CAP_DSHOW)
-        else:
-            cam = cv2.VideoCapture(self._cam_ind)
-        logging.info("Camera %i acquired." % (self._cam_ind,))
+        cam = open_camera(self._cam_ind)
         self._apply_settings(cam)
-
         fps = cam.get(cv2.CAP_PROP_FPS)
         logging.info("\tDevice FPS:  %s" % (fps,))
 
@@ -143,6 +130,7 @@ class Camera(object):
         while not self._shutdown:
             # need to change settings?
             if not self._settings_changes_q.empty():
+                # need to do in same thread
                 self._apply_settings(cam)
 
             # grab data & send to callback
@@ -163,31 +151,3 @@ class Camera(object):
         logging.info("Camera:  releasing device...")
         cam.release()
         logging.info("Camera thread finished.")
-
-
-def pick_camera(gui=True):
-    """
-    Ask user which camera to use.
-    """
-    prompt = "Please select one of the detected cameras:"
-    print("Detecting cameras...")
-    n_cams = count_cameras()
-    logging.info("Detected %i cameras." % (n_cams,))
-    if n_cams < 1:
-        raise Exception("Webcam required for this version")
-    elif n_cams == 1:
-        cam_ind = 0
-    else:
-        choices = ['camera 0 (for laptops, probably user-facing)',
-                   'camera 1 (probably forward-facing)']
-        choices.extend(["camera %i" % (ind + 2,) for ind in range(n_cams - 2)])
-        if gui:
-            chooser = ChooseItemDialog(prompt=prompt)
-            cam_ind = chooser.ask_text(choices)
-        else:
-            cam_ind = choose_item_text(choices, prompt)
-        if cam_ind is None:
-            raise Exception("User selected no camera.")
-        print("Chose", cam_ind)
-    return cam_ind
-

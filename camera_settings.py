@@ -13,63 +13,14 @@ import logging
 from .gui_picker import ChooseItemDialog, choose_item_text
 from .platform_deps import open_camera
 
-_RESOLUTION_CACHE_FILENAME = "common_resolutions.json"
+_RESOLUTION_CACHE_FILENAME = "common_resolutions_abbrev.json"
 
 
-def _get_cache_filename():
-    path, _ = os.path.split(__file__)
-    return os.path.join(path, _RESOLUTION_CACHE_FILENAME)
-
-
-def download_common_resolutions(save_file=None):
-    """
-    Get list from wikipedia.
-    idea from: https://www.learnpythonwithrune.org/find-all-possible-webcam-resolutions-with-opencv-in-python/
-
-    :param save_file:  save list (JSON), i.e. to make a new local cached copy
-    :return: dict(widths=[list of widths], heights = [list of heights])
-    """
-    logging.info("Downloading resolution list...")
-
-    # https://stackoverflow.com/questions/44629631/while-using-pandas-got-error-urlopen-error-ssl-certificate-verify-failed-cert
-    ssl._create_default_https_context = ssl._create_unverified_context
-    url = "https://en.wikipedia.org/wiki/List_of_common_resolutions"
-
-    table = pd.read_html(url)[0]
-    table.columns = table.columns.droplevel()
-    resolutions = table.get(['W', 'H'])
-    widths, heights = resolutions['W'].tolist(), resolutions['H'].tolist()
-    resolutions = {'widths': widths, 'heights': heights}
-    if save_file is not None:
-        with open(save_file, 'w') as outfile:
-            json.dump(resolutions, outfile)
-        logging.info("Wrote %i resolutions to file:  %s" % (len(widths), save_file))
-    return resolutions
-
-
-def get_common_resolutions(no_network=False):
-    """
-    Try to download and/or load local copy.
-
-    :param no_network:  skip download attempt
-    :return: dict(widths=[list of widths], heights = [list of heights])
-    """
-    load_cache = False
-    if not no_network:
-        logging.info("Attempting to download list of common resolutions...")
-        try:
-            resolutions = download_common_resolutions()
-            logging.info("Found %i resolutions." % (len(resolutions['widths']),))
-        except:
-            logging.info("Download failed, loading cached resolutions...")
-            load_cache = True
-    else:
-        load_cache = True
-    if load_cache:
-        with open(_get_cache_filename(), 'r') as infile:
-            resolutions = json.load(infile)
-        logging.info("Loaded %i resolutions from cache." % (len(resolutions['widths']),))
-    return resolutions
+def read_resolutions_file():
+    path = os.path.join(os.path.split(__file__)[0], _RESOLUTION_CACHE_FILENAME)
+    with open(path, 'r') as infile:
+        data = json.load(infile)
+    return data
 
 
 def probe_resolutions(resolutions, cam_index):
@@ -80,43 +31,75 @@ def probe_resolutions(resolutions, cam_index):
     :return: dict(widths=[list of widths], heights = [list of heights])
     """
 
-    def _test(w, h):
-        print("\tprobing %i x %i ..." % (w, h))
+    def _test(cam, w, h):
+        logging.info("\tProbing camera %i with %i x %i ..." % (cam_index, w, h))
         cam.set(cv2.CAP_PROP_FRAME_WIDTH, w)
         cam.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
         width = cam.get(cv2.CAP_PROP_FRAME_WIDTH)
         height = cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
         worked = (width == w and height == h)
-        print("\t%s" % (worked,))
+        if worked:
+            logging.info("\t\tSuccess.")
         return worked
 
     logging.info("Probing camera %i ..." % (cam_index,))
-    came = open_camera(cam_index)
-    valid = [(w, h) for w, h in zip(resolutions['widths'], resolutions['heights']) if _test(w, h)]
+    cam = open_camera(cam_index)
+    valid = [(w, h) for w, h in zip(resolutions['widths'],
+                                    resolutions['heights']) if _test(cam, w, h)]
     cam.release()
 
     logging.info("Found %i valid resolutions." % (len(valid),))
-    return {'widths': [v[0] for v in valid], 'heights': [v[1] for v in valid]}
+    result = {'widths': [v[0] for v in valid], 'heights': [v[1] for v in valid]}
 
 
-def user_pick_resolution(camera_index=0, no_network=False, gui=True):
+def pick_camera(gui=True):
     """
-    Download (or load if offline) list of common resolutions.
+    Ask user which camera to use.
+    """
+    prompt = "Please select one of the detected cameras:"
+    print("Detecting cameras...")
+    n_cams = count_cameras()
+    logging.info("Detected %i cameras." % (n_cams,))
+    if n_cams < 1:
+        raise Exception("Webcam required for this version")
+    elif n_cams == 1:
+        cam_ind = 0
+    else:
+        choices = ['camera 0 (for laptops, probably user-facing)',
+                   'camera 1 (probably forward-facing)']
+        choices.extend(["camera %i" % (ind + 2,) for ind in range(n_cams - 2)])
+        if gui:
+            chooser = ChooseItemDialog(prompt=prompt)
+            cam_ind = chooser.ask_text(choices)
+        else:
+            cam_ind = choose_item_text(choices, prompt)
+        if cam_ind is None:
+            raise Exception("User selected no camera.")
+        print("Chose", cam_ind)
+    return cam_ind
+
+
+def user_pick_resolution(camera_index=0, gui=True, probe=False):
+    """
+    Read list of common resolutions ("common_resolutions.json")
     Check camera can be set to each one.
     Prompt user to pick one.
 
-    if gui=True, use TK dailog box, else use command prompt.
+    if gui=True, use TK dialog box, else use command prompt.
 
     :param camera_index:  Which camera?
-    :param no_network:  Skip download attempt
     :return:  (width, height) or None if user opted out of selection.
     """
 
-    logging.info("\nLoading list of common resolutions...")
-    res = get_common_resolutions(no_network=no_network)
-    logging.info("\nProbing camera %i with %i resolutions...\n" % (camera_index, len(res['widths']),))
-    valid = probe_resolutions(res, cam_index=camera_index)
-    logging.info("\n\t... found %i valid resolutions!" % (len(valid['widths']),))
+    logging.info("Loading list of resolutions...")
+    res = read_resolutions_file()
+    if probe:
+        logging.info("\tProbing camera %i with %i resolutions...\n" % (camera_index, len(res['widths']),))
+        valid = probe_resolutions(res, cam_index=camera_index)
+        logging.info("\t\t... found %i valid resolutions!" % (len(valid['widths']),))
+    else:
+        valid = res
+        logging.info("Not checking resolutions.")
 
     choices = ["%i x %i" % (w, h) for w, h in zip(valid['widths'], valid['heights'])]
     if gui:
@@ -152,9 +135,7 @@ def count_cameras():
     return n
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
+def _interactive_test():
     # run to update cache:
     # update_common_resolutions(RESOLUTION_CACHE_FILENAME)
     # sys.exit()
@@ -169,3 +150,8 @@ if __name__ == "__main__":
 
     res = user_pick_resolution(gui=False)
     print("User selected:  %s" % (res,))
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    _interactive_test()

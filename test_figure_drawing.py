@@ -1,7 +1,7 @@
-from gui_utils.figure_drawing import SpriteArtist, DrawableComponent
+from .figure_drawing import SpriteArtist, DrawableComponent
 import numpy as np
-from gui_utils.colors import RGBA_COLORS_OPAQUE as RGBA_COLORS
-from gui_utils.colors import RGB_COLORS, BW_COLORS
+from .colors import RGBA_COLORS_OPAQUE as RGBA_COLORS
+from .colors import RGB_COLORS, BW_COLORS
 
 import cv2
 

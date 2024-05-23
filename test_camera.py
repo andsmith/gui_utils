@@ -1,4 +1,4 @@
-from .camera import Camera, pick_camera
+from .camera import Camera
 import logging
 import time
 import cv2
@@ -32,13 +32,12 @@ class CamTester(object):
             self._cam.shutdown()
 
 
-def _test_camera():
+def _test_camera(cam_ind=0):
     # cam_ind = pick_camera(gui=False)
-    cam_ind = pick_camera(gui=True)
     print("Done testing camera picker.")
     CamTester(cam_ind)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    _test_camera()
+    _test_camera(0)
