@@ -11,6 +11,10 @@ def is_windows():
     return platform.system() == 'Windows'
 
 
+def is_v_10():
+    return platform.version().startswith('10L')
+
+
 def is_java():
     return platform.system() == "Java"
 
@@ -22,6 +26,8 @@ def is_linux():
 def open_camera(index=0, ):
     """
     For platform-dependent params, etc.
+    :param index: camera index
+    :returns:  VideoCapture object
     """
     if is_windows():
         cam = cv2.VideoCapture(index, cv2.CAP_DSHOW)

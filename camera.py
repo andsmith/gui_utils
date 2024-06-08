@@ -1,16 +1,17 @@
 """
-Cv2 wrapper, using callback for incoming frames.
+CV2 wrapper to manage detection of system camera capabilities and user's selection.
 """
 import cv2
 import time
 import numpy as np
 import logging
+import appdirs
 import os
 from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 from .platform_deps import open_camera
-from .camera_settings import user_pick_resolution
+from .camera_settings import CameraSettings
 
 
 def get_cv2_prop_names():
@@ -23,47 +24,29 @@ class ShutdownException(Exception):
 
 
 class Camera(object):
+    """
+    Creating a Camera object with no arguments will load the current configuration or use the default if none exists.
+    To create a more specific camera object (e.g. which camera, what resolution), pass in the appropriately constructed
+        CameraSettings object, which will scan/ask for any missing information first.
+    """
     _PROPS = get_cv2_prop_names()
     WIDTH_FLAG = cv2.CAP_PROP_FRAME_WIDTH
     HEIGHT_FLAG = cv2.CAP_PROP_FRAME_HEIGHT
 
-    def __init__(self, cam_ind, callback=None, settings=None, prompt_resolution=False, mirror=True):
+    def __init__(self, callback=None, settings=None):
         """
-        Webcam wrapper.  If user is asked for resolution, don't return until then.
 
-        :param cam_ind:  cv2 camera index
         :param callback:  function(frame, time) to call with new frames
-        :param settings: dict with params for VideoCapture.set(key=value)
-
-        :param prompt_resolution:  Ask user for camera resolution before starting.
+        :param settings: CameraSettings object overriding defaults, or None to use current config files
 
         """
-        self._prompt_resolution = prompt_resolution
-        self._cam_ind = cam_ind
+        self._settings = settings if settings is not None else CameraSettings()
+
         self._shutdown = False
-        self._mirror = mirror
         self._started = False
-        self._is_windows = os.name == 'nt'
-        self._cam_thread = Thread(target=self._cam_thread_proc)
         self._callback = callback
 
-        self._settings = {}
-        self._settings_lock = Lock()  # need to be set in same thread as camera
-        self._settings_changes_q = Queue()  # each should be a dict with setting--value pairs
-        if settings is not None:
-            self._settings_changes_q.put(settings)
-            logging.info("%i settings queued to be applied." % (len(settings),))
-        self._resolution = None
-
-        if prompt_resolution:
-            resolution = user_pick_resolution(self._cam_ind)
-            if resolution is None:
-                self.shutdown()
-                logging.info("User exit.")
-                raise ShutdownException()
-            width, height = resolution
-            self._settings_changes_q.put({Camera.WIDTH_FLAG: width,
-                                          Camera.HEIGHT_FLAG: height})
+        self._cam_thread = Thread(target=self._cam_thread_proc)
 
     def start(self):
         if self._started:
@@ -82,40 +65,19 @@ class Camera(object):
         """
         Add settings changes to queue (should happen in camera thread to be safe).
         """
-        if target_resolution is not None:
-            width, height = target_resolution
-            self._settings_changes_q.put({Camera.WIDTH_FLAG: width,
-                                          Camera.HEIGHT_FLAG: height})
-        else:
-            logging.info("No target resolution, camera not changed.")
-
-    def _apply_settings(self, cam):
-        """
-        Apply queued setting changes to camera.
-        :param cam: VideoCapture object
-        """
-        things_to_set = {}
-        while not self._settings_changes_q.empty():
-            things_to_set.update(self._settings_changes_q.get(block=True))
-
-        for setting in things_to_set:
-            name = self._PROPS[setting]
-            logging.info("Setting camera property '%s' (%i):  %s" % (name, setting, things_to_set[setting]))
-            cam.set(setting, things_to_set[setting])
-
-        for setting in things_to_set:
-            new_value = cam.get(setting)
-            name = self._PROPS[setting]
-            logging.info("New camera property '%s' (%i):  %s" % (name, setting, new_value))
+        width, height = target_resolution
+        self._settings.enqueue({Camera.WIDTH_FLAG: width,
+                                Camera.HEIGHT_FLAG: height})
 
     def _open_camera(self):
         """
         Open current camera, apply settings, prompt user if necessary
         :return: VideoCapture() object
         """
-        logging.info("Acquiring camera %i..." % (self._cam_ind,))
-        cam = open_camera(self._cam_ind)
-        self._apply_settings(cam)
+        index = self._settings.get_index()
+        logging.info("Acquiring camera %i..." % (index,))
+        cam = open_camera(index)
+        self._settings.flush_changes(cam)
         fps = cam.get(cv2.CAP_PROP_FPS)
         logging.info("\tDevice FPS:  %s" % (fps,))
 
@@ -129,9 +91,9 @@ class Camera(object):
 
         while not self._shutdown:
             # need to change settings?
-            if not self._settings_changes_q.empty():
+            if self._settings.changes_pending():
                 # need to do in same thread
-                self._apply_settings(cam)
+                self._settings.flush_changes(cam)
 
             # grab data & send to callback
             ret, frame = cam.read()
@@ -141,7 +103,7 @@ class Camera(object):
                 time.sleep(.1)
                 continue
 
-            if self._mirror:
+            if self._settings.is_mirrored():
                 frame = np.ascontiguousarray(frame[:, ::-1, :])
             else:
                 frame = np.ascontiguousarray(frame)  # mirror image, not real image

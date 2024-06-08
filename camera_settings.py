@@ -1,7 +1,6 @@
 """
-Utilities / GUI for changing these webcam settings:
-    * resolution
-    * ?
+Represent possible camera settings & user's choice.
+(See README.md for details)
 """
 
 import pandas as pd
@@ -11,16 +10,96 @@ import os
 import json
 import logging
 from .gui_picker import ChooseItemDialog, choose_item_text
-from .platform_deps import open_camera
+from .platform_deps import open_camera, is_v_10, is_windows
+import appdirs
 
-_RESOLUTION_CACHE_FILENAME = "common_resolutions_abbrev.json"
+_APP_NAME = "gui_utils"
+_APP_AUTHOR = "andsmith"
+
+# in user dir (e.g. .local)
+_SYSTEM_CAMERA_SPECS = "camera_specs.json"  # Created when computer & camera are scanned
+_USER_CAMERA_SETTINGS = "camera_config.json"  # Created when user selects which of the settings detected are to be used  (delete this to change, etc.)
+
+# in app src dir
+_RES_FILE_SHORT = "common_resolutions_abbrev.json"  # scan for these if Win 10, only the more common
+_RES_FILE = "common_resolutions.json"  # scan for these otherwise
 
 
-def read_resolutions_file():
-    path = os.path.join(os.path.split(__file__)[0], _RESOLUTION_CACHE_FILENAME)
-    with open(path, 'r') as infile:
-        data = json.load(infile)
-    return data
+class SystemSettings(object):
+    """
+    Class to represent system camera info.
+    Attempt to load system config file, otherwise use defaults and scan the computer.
+    """
+
+    def __init__(self):
+        self._camera_resolutions = 
+        self._default_resolutions = self._load_default_resolutions()
+
+    def get_possible_resolutions(self, index):
+        if index not in self._camera_resolutions:
+            self._camera_resolutions[index] = probe_resolutions()
+
+    def _load_default_resolutions(self):
+        if is_windows() and is_v_10():
+            res_data_file = _RES_FILE_SHORT
+        else:
+            res_data_file = _RES_FILE
+
+        path = os.path.join(os.path.split(__file__)[0], res_data_file)
+        with open(path, 'r') as infile:
+            data = json.load(infile)
+        return data
+
+
+class CameraSettings(object):
+
+    def __init__(self, index=None, res_w_h=None, mirrored=True, use_gui=True):
+        """
+        Manage
+        """
+        self._mirrored = mirrored
+        self._gui = use_gui
+        self._cam_index = index
+        self._res = res_w_h
+
+    def is_mirrored(self):
+        return self._mirrored
+
+    def _save_settings(self):
+        pass
+
+    def get_index(self):
+        if self._cam_index is None:
+            self._cam_index = user_pick_camera(self._gui)
+        self._save_settings()
+        return self._cam_index
+
+    def get_resolution_wh(self):
+        if self._res is None:
+            self._res = user_pick_resolution(self.get_index(), self._gui)
+        self._save_settings()
+        return self._res
+
+    def change_settings(self, new_settings):
+
+    def flush_changes(self, cam):
+        """
+        Apply queued setting changes to camera.
+        :param cam: VideoCapture object
+        """
+        things_to_set = {}
+        while not self._settings_changes_q.empty():
+            things_to_set.update(self._settings_changes_q.get(block=True))
+
+        for setting in things_to_set:
+            name = self._PROPS[setting]
+            logging.info("Setting camera property '%s' (%i):  %s" % (name, setting, things_to_set[setting]))
+            cam.set(setting, things_to_set[setting])
+
+        for setting in things_to_set:
+            new_value = cam.get(setting)
+            name = self._PROPS[setting]
+            logging.info("New camera property '%s' (%i):  %s" % (name, setting, new_value))
 
 
 def probe_resolutions(resolutions, cam_index):
@@ -52,7 +131,7 @@ def probe_resolutions(resolutions, cam_index):
     result = {'widths': [v[0] for v in valid], 'heights': [v[1] for v in valid]}
 
 
-def pick_camera(gui=True):
+def user_pick_camera(gui=True):
     """
     Ask user which camera to use.
     """
