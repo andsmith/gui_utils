@@ -12,7 +12,7 @@ def is_windows():
 
 
 def is_v_10():
-    return platform.version().startswith('10L')
+    return platform.version().startswith('10')
 
 
 def is_java():
