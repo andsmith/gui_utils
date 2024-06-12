@@ -7,11 +7,12 @@ import numpy as np
 import logging
 import appdirs
 import os
+from enum import IntEnum
 from threading import Thread, Lock
 from queue import Queue
 from copy import deepcopy
 from .platform_deps import open_camera
-from .camera_settings import CameraSettings
+from .camera_settings import UserSettingsManager
 
 
 def get_cv2_prop_names():
@@ -27,20 +28,26 @@ class Camera(object):
     """
     Creating a Camera object with no arguments will load the current configuration or use the default if none exists.
     To create a more specific camera object (e.g. which camera, what resolution), pass in the appropriately constructed
-        CameraSettings object, which will scan/ask for any missing information first.
+        UserSettingsManager object, which will scan/ask for any missing information required for the VideoCapture.
     """
     _PROPS = get_cv2_prop_names()
     WIDTH_FLAG = cv2.CAP_PROP_FRAME_WIDTH
     HEIGHT_FLAG = cv2.CAP_PROP_FRAME_HEIGHT
 
-    def __init__(self, callback=None, settings=None):
+    def __init__(self, index=None, callback=None, ask_user='gui', mirrored=True, resolution_wh=None):
         """
-
+        :param index:  cv2 camera index, or, if None then use value in user settings file (or default if index isn't
+            set).
         :param callback:  function(frame, time) to call with new frames
-        :param settings: CameraSettings object overriding defaults, or None to use current config files
+        :param ask_user: If no camera settings file is found, or if it is missing information:
+            'gui':  as user in a dialog box
+            'console':  ask user w/text
+            'quiet':  use default values for missing settings
+        :param mirrored:  if True, images are horizontally flipped
+        :param resolution_wh:  Tuple with (width, height), or None to ask user/use defaults.
 
         """
-        self._settings = settings if settings is not None else CameraSettings()
+        self._settings = UserSettingsManager(index=index, res_w_h=resolution_wh, mirrored=mirrored, use_gui=ask_user)
 
         self._shutdown = False
         self._started = False
@@ -63,7 +70,7 @@ class Camera(object):
 
     def set_resolution(self, target_resolution=None):
         """
-        Add settings changes to queue (should happen in camera thread to be safe).
+        Add settings changes to queue (should happen in camera's thread to be safe).
         """
         width, height = target_resolution
         self._settings.enqueue({Camera.WIDTH_FLAG: width,
@@ -99,7 +106,7 @@ class Camera(object):
             ret, frame = cam.read()
             frame_time = time.perf_counter()
             if not ret:
-                logging.warning("Camera not getting data, sleeping for a bit...")
+                logging.warning("Camera returning no data, sleeping for a bit...")
                 time.sleep(.1)
                 continue
 
