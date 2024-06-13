@@ -1,9 +1,7 @@
 """
-Represent possible camera settings & user's choice.
-(See README.md for details)
-"""
+Represent user's camera settings, i.e. from the list of possibilities in the SystemCameraSettings object it creates.
+NOTE:  This does not interface directly with the camera, just store the info."""
 
-import cv2
 import json
 import logging
 from .gui_picker import ChooseItemDialog, choose_item_text
@@ -110,35 +108,6 @@ class UserSettingsManager(object):
 
     def get_resolution_wh(self):
         return self._settings['res']
-
-    '''
-    def change_settings(self, new_settings):
-        """
-        Enqueue camera settings changes (take effect before grabbing next frame)
-        :param new_settings: dict(setting_name=setting_value, ...)
-        """
-        self._
-
-    def flush_changes(self, cam):
-        """
-        Apply queued setting changes to camera.
-        :param cam: VideoCapture object
-        """
-        things_to_set = {}
-        while not self._settings_changes_q.empty():
-            things_to_set.update(self._settings_changes_q.get(block=True))
-
-        for setting in things_to_set:
-            name = self._PROPS[setting]
-            logging.info("Setting camera property '%s' (%i):  %s" % (name, setting, things_to_set[setting]))
-            cam.set(setting, things_to_set[setting])
-
-        for setting in things_to_set:
-            new_value = cam.get(setting)
-            name = self._PROPS[setting]
-            logging.info("New camera property '%s' (%i):  %s" % (name, setting, new_value))
-
-    '''
 
 
 def user_pick_camera(n_cams, gui=True):
