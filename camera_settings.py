@@ -7,7 +7,7 @@ import cv2
 import json
 import logging
 from .gui_picker import ChooseItemDialog, choose_item_text
-from detect_camera_settings import SystemCameraConfig
+from .detect_camera_settings import SystemCameraConfig
 import os
 
 # File created when user selects which of the settings detected are to be used  (delete it to ask user again, etc.)
@@ -36,6 +36,7 @@ class UserSettingsManager(object):
         :param mirrored:  If True, images will be horizontally flipped, same default behavior as index,
         :param interaction:  how to find missing information, must be one of UserSettingsManager.USER_INTERACTION_MODES
         """
+
         if interaction not in UserSettingsManager.USER_INTERACTION_MODES:
             raise Exception("Interaction mode must be one of these: %s" % (UserSettingsManager.USER_INTERACTION_MODES,))
         self._system = SystemCameraConfig()
@@ -50,8 +51,9 @@ class UserSettingsManager(object):
 
     def _write_settings_file(self):
         user_file_path = os.path.expanduser(os.path.join('~', _USER_CAMERA_SETTINGS))
-        with open(user_file_path, 'r') as outfile:
+        with open(user_file_path, 'w') as outfile:
             json.dump(self._settings, outfile)
+
         logging.info("Wrote new user camera config file:  %s" % (user_file_path,))
 
     def _disambiguate_settings(self, loaded):
@@ -85,6 +87,8 @@ class UserSettingsManager(object):
                     self._settings['res'] = user_pick_resolution(valid_resolutions, use_gui)
                 else:
                     self._settings['res'] = 640, 480
+            else:
+                self._settings['res'] = loaded['res']
 
     @staticmethod
     def _load_settings_file():
@@ -160,7 +164,6 @@ def user_pick_camera(n_cams, gui=True):
             cam_ind = choose_item_text(choices, prompt)
         if cam_ind is None:
             raise Exception("User selected no camera.")
-        print("Chose", cam_ind)
     return cam_ind
 
 
@@ -181,25 +184,16 @@ def user_pick_resolution(resolution_list, gui=True):
     return resolution_list['widths'][selection], resolution_list['heights'][selection]
 
 
-def _interactive_test():
-    # run to update cache:
-    # update_common_resolutions(RESOLUTION_CACHE_FILENAME)
-    # sys.exit()
-
-    # run to demo picker
-    # res = pick_resolution(1)
-    # print("Selected:  ", res)
-    # sys.exit()
-
-    res = user_pick_resolution()
-    print("User selected:  %s" % (res,))
-
-    res = user_pick_resolution(gui=False)
-    print("User selected:  %s" % (res,))
+def _user_test():
+    usm = UserSettingsManager()
+    logging.info("UserSettingsManager created with:\n\tcamera:  %i\n\tmirrored:  %s\n\tresolution:  %s" % (
+        usm.get_index(),
+        usm.is_mirrored(),
+        usm.get_resolution_wh()))
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     # _interactive_test()
 
-    _sys_test()
+    _user_test()
