@@ -42,4 +42,14 @@ def add_alpha(color, alpha):
     return color[0], color[1], color[2], alpha
 
 
+def hex_to_bgr(hex):
+    if isinstance(hex, str):
+        num = int(hex[-6:], base=16)
+    elif isinstance(hex, int):
+        num = hex
+    else:
+        raise Exception("Unknown type:  %s" % (type(hex),))
+    return num & 0xff, (num >> 8) & 0xff,(num >> 16) & 0xff
+
+
 RGBA_COLORS_OPAQUE = {k: add_alpha(RGB_COLORS[k], 255) for k in RGB_COLORS}
