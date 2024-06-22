@@ -68,7 +68,7 @@ class Display(object):
             if not self._quiet:
                 t_total = self._fps_info['mean_idle_time'] + \
                     self._fps_info['mean_busy_time']
-                logging.info("Display FPS: %f, mean display time/frame: %.3f ms (%.1f %%) , mean idle/frame: %.3f ms (%.1f %%) " % 
+                logging.info("Display FPS: %f, mean display time/frame: %.3f ms (%.1f %%), mean idle/frame: %.3f ms (%.1f %%) " % 
                              (self._fps_info['fps'],
                                 1000*self._fps_info['mean_busy_time'],
                                 100*(self._fps_info['mean_busy_time']/t_total),
