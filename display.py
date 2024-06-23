@@ -52,10 +52,8 @@ class Display(object):
         t_start = time.perf_counter()
 
         self._fps_info['t_idle'] += t_start - self._t_display_complete
-        print("A")
         cv2.imshow(self._window_name, frame)
         k = cv2.waitKey(wait) & 0xFF
-        print("B")
         if self._keyboard_callback is not None:
             self._keyboard_callback(k)
         elif k == ord('q'):
@@ -70,13 +68,6 @@ class Display(object):
             self._fps_info['mean_busy_time'] = self._fps_info['t_busy'] / \
                 self._fps_info['n_frames']
             if not self._quiet:
-                logging.info("Display FPS: %f, mean idle time/frame: %f ms, mean display time/frame:  %f ms. total time: %f (of %f)" % (
-                    self._fps_info['fps'],
-                    1000*self._fps_info['mean_idle_time'],
-                    1000*self._fps_info['mean_busy_time'],
-                    self._fps_info['t_idle'] +
-                    self._fps_info['t_busy'], dt))
-
                 t_total = self._fps_info['mean_idle_time'] + \
                     self._fps_info['mean_busy_time']
                 logging.info("Display FPS: %f, mean display time/frame: %.3f ms (%.1f %%), mean idle/frame: %.3f ms (%.1f %%) " % 
