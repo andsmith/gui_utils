@@ -15,7 +15,7 @@ class Display(object):
         self._frame = None
         self._quiet = quiet
         self._mouse_callback, self._keyboard_callback = None, None
-
+        self._flags= window_flags
         self._fps_info = {
             'reporting_cycle_seconds': 2.,  # report FPS every 'reporting_cycle' frames
             't_start': time.perf_counter(),  # start time of the current reporting cycle
@@ -28,14 +28,13 @@ class Display(object):
             # 'mean_busy_time': 0.} # mean display time per frame in the last reporting cycle
         }
         self._t_display_complete = time.perf_counter()
-
-        cv2.namedWindow(window_name, window_flags)
+        self._started = False
 
     def set_mouse_callback(self, callback=None):
-        self._mouse_callback(callback)
+        self._mouse_callback = callback
 
     def set_keyboard_callback(self, callback=None):
-        self._keyboard_callback(callback)
+        self._keyboard_callback = callback
 
     def show(self, frame, wait=1):
         """
@@ -44,12 +43,17 @@ class Display(object):
         :param wait: time to wait for a key press (ms)
         :return: True if there is no keyboard callback and user pressed 'q', False otherwise
         """
+        if not self._started:
+            cv2.namedWindow(self._window_name, self._flags)
+            self._started = True
+            
         t_start = time.perf_counter()
 
         self._fps_info['t_idle'] += t_start - self._t_display_complete
-
+        print("A")
         cv2.imshow(self._window_name, frame)
         k = cv2.waitKey(wait) & 0xFF
+        print("B")
         if self._keyboard_callback is not None:
             self._keyboard_callback(k)
         elif k == ord('q'):
@@ -71,7 +75,7 @@ class Display(object):
                     1000*self._fps_info['mean_busy_time'],
                     self._fps_info['t_idle'] +
                     self._fps_info['t_busy'], dt))
-                
+
             self._fps_info['t_busy'] = 0.
             self._fps_info['t_idle'] = 0.
             self._fps_info['n_frames'] = 0
@@ -87,7 +91,7 @@ class Display(object):
 
 
 def test_display():
-    w, h = (1600, 800)
+    w, h = (1600, 480)
     t0 = time.perf_counter()
     x_freq_range = [3, 8]
     y_freq_range = [2, 6]
