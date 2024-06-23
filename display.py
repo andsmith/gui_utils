@@ -1,11 +1,12 @@
 """
-Lightweight wrapper for CV2 display functions.
+Lightweight wrapper for CV2 video display functions.
 """
 import cv2
 import time
 import numpy as np
 import logging
 import threading
+# from loop_timing.loop_profiler import LoopPerfTimer
 
 
 class Display(object):
@@ -36,6 +37,7 @@ class Display(object):
     def set_keyboard_callback(self, callback=None):
         self._keyboard_callback = callback
 
+    # @LoopPerfTimer.time_function
     def show(self, frame, wait=1):
         """
         Show a frame and handle keyboard input.
@@ -58,7 +60,6 @@ class Display(object):
             self._keyboard_callback(k)
         elif k == ord('q'):
             return True
-
         self._fps_info['n_frames'] += 1
         if t_start - self._fps_info['t_start'] > self._fps_info['reporting_cycle_seconds']:
             now = time.perf_counter()
@@ -76,6 +77,14 @@ class Display(object):
                     self._fps_info['t_idle'] +
                     self._fps_info['t_busy'], dt))
 
+                t_total = self._fps_info['mean_idle_time'] + \
+                    self._fps_info['mean_busy_time']
+                logging.info("Display FPS: %f, mean display time/frame: %.3f ms (%.1f %%), mean idle/frame: %.3f ms (%.1f %%) " % 
+                             (self._fps_info['fps'],
+                                1000*self._fps_info['mean_busy_time'],
+                                100*(self._fps_info['mean_busy_time']/t_total),
+                                1000*self._fps_info['mean_idle_time'],
+                                100*(self._fps_info['mean_idle_time']/t_total)))
             self._fps_info['t_busy'] = 0.
             self._fps_info['t_idle'] = 0.
             self._fps_info['n_frames'] = 0
@@ -96,22 +105,35 @@ def test_display():
     x_freq_range = [3, 8]
     y_freq_range = [2, 6]
     window_name = "Test Display"
+x_freq_range = [3, 8]
+y_freq_range = [2, 6]
+t0 = time.perf_counter()
 
-    def _make_frame(size, time):
-        x_freq = np.cos((time-t0)*2*np.pi) * \
-            (x_freq_range[1]-x_freq_range[0])/2 + np.mean(x_freq_range)
-        y_freq = np.sin(1+(time-t0)*2*np.pi) * \
-            (y_freq_range[1]-y_freq_range[0])/2 + np.mean(y_freq_range)
-        img = np.zeros((h, w), dtype=np.uint8)
-        t = np.linspace(0, 2*np.pi, 10000)
-        x = (np.cos(t*x_freq) + 1)/2 * (w-1)
-        y = (np.sin(t*y_freq) + 1)/2 * (h-1)
-        img[(y.astype(int), x.astype(int))] = 255
-        return img
+
+# @LoopPerfTimer.time_function
+def _make_frame(size, time):
+
+    x_freq = np.cos((time-t0)*2*np.pi) * \
+        (x_freq_range[1]-x_freq_range[0])/2 + np.mean(x_freq_range)
+    y_freq = np.sin(1+(time-t0)*2*np.pi) * \
+        (y_freq_range[1]-y_freq_range[0])/2 + np.mean(y_freq_range)
+    img = np.zeros(size[::-1], dtype=np.uint8)
+    t = np.linspace(0, 2*np.pi, 10000)
+    x = (np.cos(t*x_freq) + 1)/2 * (size[0]-1)
+    y = (np.sin(t*y_freq) + 1)/2 * (size[1]-1)
+    img[(y.astype(int), x.astype(int))] = 255
+    return img
+
+
+def test_display():
+    w, h = (1600, 800)
+    window_name = "Test Display"
 
     display = Display(window_name)
-
+    # LoopPerfTimer.reset(enable=True, burn_in=10, display_after=100, save_filename=None)
     while True:
+        # LoopPerfTimer.mark_loop_start()
+
         frame = _make_frame((w, h), time.perf_counter())
         if display.show(frame):
             break
