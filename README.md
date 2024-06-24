@@ -23,7 +23,7 @@ full resolution file `common_resolutions.json`.
 From path 1 level above `/gui_utils/`:
 
 ```
- > python -m gui_utils.test_camera
+ > python -m gui_utils.camera
 ```
 
 ![res_detect_user_pick](https://github.com/andsmith/gui_utils/blob/main/detect_resolution_and_gui_picker.png)
