@@ -38,7 +38,7 @@ class VideoBase(object, metaclass=ABCMeta):
         """
         self._quiet = quiet
         self._window_name = window_name
-        self._frame_res, self._disp_res = frame_res, disp_res
+        self._frame_res, self._disp_res = self._disambiguate_resolution(frame_res, disp_res)
         self._stop = False  # loops should watch this and exit if it's True
         self._started = False
         self._callback = callback
@@ -58,6 +58,14 @@ class VideoBase(object, metaclass=ABCMeta):
             # 'mean_busy_time': 0.} # mean display time per frame in the last reporting cycle
         }
         self._t_display_complete = time.perf_counter()
+
+    @abstractmethod
+    def _disambiguate_resolution(self, frame_res, disp_res):
+        """
+        If one or both of the resolutions are None, figure out what they should be.
+        :return:  frame_res, disp_res tuple, with the resolutions resolved.
+        """
+        pass
 
     @abstractmethod
     def _start_making_frames(self):
@@ -109,7 +117,7 @@ class VideoBase(object, metaclass=ABCMeta):
         logging.info("Output resolution set to %s" % (res,))
 
     def set_frame_callback(self, new_callback=None):
-        self._frame_callback = new_callback
+        self._callback = new_callback
         logging.info("Frame callback changed.")
 
     def set_mouse_callback(self, new_callback=None):
@@ -129,12 +137,12 @@ class VideoBase(object, metaclass=ABCMeta):
         logging.info("Opened display window with flag:  %s" % (self._flags,))
         if self._disp_res is None:
             self._disp_res = input_resolution
-            logging.info("Display resolution set to %s" % (input_resolution,))
+            logging.info("Display resolution (automatically) set to %s" % (input_resolution,))
         # self.set_disp_resolution(self._disp_res)  # TODO: FIX THIS, figure out why uncommenting slows down the display
 
         self._started = True
 
-    def show(self, frame):
+    def show(self, frame, wait=1):
         """
         Show a frame and handle keyboard input. NOTE: this must be called from the same thread as the callback that received the new frame.
         :param frame: numpy array representing an image
@@ -145,10 +153,9 @@ class VideoBase(object, metaclass=ABCMeta):
             self._init_display((frame.shape[1], frame.shape[0]))
 
         t_start = time.perf_counter()
-
         self._fps_info['t_idle'] += t_start - self._t_display_complete
         cv2.imshow(self._window_name, frame)
-        k = cv2.waitKey(1) & 0xFF
+        k = cv2.waitKey(wait) & 0xFF
         if self._keyboard_callback is not None:
             self._keyboard_callback(k)
         elif k == ord('q'):

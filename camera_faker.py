@@ -11,7 +11,6 @@ from .gui_picker import ChooseItemDialog, choose_item_text
 import time
 import cv2
 
-
 class BlankFrameGenerator(VideoBase):
     """
     Generate frames of a solid color, for when not using a camera.
@@ -34,12 +33,11 @@ class BlankFrameGenerator(VideoBase):
         :param color:  Color of the background, as an RGB tuple.
         :param ask_user:  'gui' to prompt user for settings in a dialog box, 'cli' to ask on the command line, 'silent'/None to use defaults.
         """
-        self._frame_res, self._disp_res = self._resolve_resolution(
-            ask_user, frame_res, disp_res)
-
-        super().__init__(self._frame_res, self._disp_res, window_name,
+        self._ask_user = ask_user
+        super().__init__(frame_res, disp_res, window_name,
                          callback=callback, mouse_callback=mouse_callback,
                          keyboard_callback=None, window_flags=window_flags)
+        
         self._dt = dt
         self._bkg_color = color
         self._make_frame()
@@ -96,7 +94,7 @@ class BlankFrameGenerator(VideoBase):
         draw_grid((2, 0),  grid_color, 16)
         draw_grid((2, 2),  grid_color, 32)
 
-    def _resolve_resolution(self, ask_user, frame_res, disp_res):
+    def _disambiguate_resolution(self, frame_res, disp_res):
         """
         If frame_res is None...
         :param ask_user:  'gui' to prompt user for settings in a dialog box, 'cli' to ask on the command line, 'silent'/None to use defaults.
@@ -104,14 +102,16 @@ class BlankFrameGenerator(VideoBase):
         :param disp_res: constructor's arg
         """
         if frame_res is None:
-            if ask_user == 'gui':
-                frame_res = ChooseItemDialog().ask_gui(
-                    choices=FrameGenerator.COMMON_RESOLUTIONS, title="Choose resolution")
-            elif ask_user == 'cli':
-                frame_res = choose_item_text(
-                    FrameGenerator.COMMON_RESOLUTIONS, prompt="Choose resolution: ")
+            if self._ask_user == 'gui':
+                resp = ChooseItemDialog(prompt="Choose resolution").ask_text(
+                    choices=BlankFrameGenerator.COMMON_RESOLUTIONS)
+                frame_res = BlankFrameGenerator.COMMON_RESOLUTIONS[resp]
+            elif self.ask_user == 'cli':
+                resp = choose_item_text(
+                    prompt="Choose resolution: ", choices=BlankFrameGenerator.COMMON_RESOLUTIONS)
+                frame_res = BlankFrameGenerator.COMMON_RESOLUTIONS[resp]
             else:
-                frame_res = FrameGenerator.COMMON_RESOLUTIONS[0]
+                frame_res = BlankFrameGenerator.COMMON_RESOLUTIONS[0]
         disp_res = frame_res if disp_res is None else disp_res
 
         logging.info("Using resolutions:  %s (generated frames), and %s (display window)" % (
@@ -136,8 +136,8 @@ class FrameGenTester(object):
     def __init__(self):
 
         win_name = "frame_gen_test"
-        # w, h = (1500,800)  # fast
-        w, h = (640, 480)  # slow!
+        w, h = (1500, 800)  # fast
+        # w, h = (640, 480)  # slow!
 
         bkg = COLORS['dark_gray']
         self._io = BlankFrameGenerator(frame_res=(w, h), color=bkg, window_name=win_name,
@@ -151,11 +151,19 @@ class FrameGenTester(object):
         self._io.start()
 
 
-def display_test_fake_camera():
-    FrameGenTester().start()
-    print("Done testing FakeCamera.")
+def camera_faker_tester():
+    """
+    Open a frame generator that asks the user for a resolution, then opens a Display to show the solid color frames.
+    """
+    video = BlankFrameGenerator(window_name="Fake Camera tester - Press 'q' to quit.", ask_user='gui')
+    def show_frame(frame, time):
+        if video.show(frame):
+            video.shutdown()
+
+    video.set_frame_callback(show_frame)
+    video.start()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    display_test_fake_camera()
+    camera_faker_tester()
