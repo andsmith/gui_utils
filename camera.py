@@ -10,7 +10,7 @@ from queue import Queue
 from copy import deepcopy
 from .platform_deps import open_camera
 from .camera_settings import UserSettingsManager
-from .camera_interface import CameraBase
+from .video_io_base import VideoBase
 
 
 def get_cv2_prop_names():
@@ -22,40 +22,58 @@ class ShutdownException(Exception):
     pass
 
 
-class Camera(CameraBase):
+class Camera(VideoBase):
     """
     Creating a Camera object with no arguments will load the current configuration or use the default if none exists.
     To create a more specific camera object (e.g. which camera, what resolution), pass in the appropriately constructed
-        UserSettingsManager object, which will scan/ask for any missing information required for the VideoCapture.
+    UserSettingsManager object, which will scan/ask for any missing information required for the VideoCapture.
     """
     _PROPS = get_cv2_prop_names()
     WIDTH_FLAG = cv2.CAP_PROP_FRAME_WIDTH
     HEIGHT_FLAG = cv2.CAP_PROP_FRAME_HEIGHT
 
-    def __init__(self, resolution_wh=None, index=None, window_name="Camera", callback=None, mouse_callback=None, ask_user='gui', mirrored=True):
+    def __init__(self, index=0, frame_res=None, disp_res=None, window_name="Camera",
+                 callback=None, mouse_callback=None, keyboard_callback=None,
+                 window_flags=cv2.WINDOW_AUTOSIZE, quiet=False, ask_user='gui', mirrored=True):
         """
-        :param resolution_wh:  Tuple with (width, height), or None to ask user/use defaults.
         :param index:  Index of the camera to use, or None to ask user/use defaults.
+        :param frame_res:  Tuple with (width, height), or None to ask user/use defaults.
+        :param disp_res:  Tuple with (width, height), or None to use frame resolution.
         :param window_name:  Name of the window to display the camera feed in.
-        :param frame_callback:  function(frame, time) to call with new frames
+        :param callback:  function(frame, time) to call with new frames
         :param mouse_callback:  function(event, x, y, flags, param) to call with mouse events
+        :param keyboard_callback:  function(key) to call with keyboard events
+        :param window_flags:  OpenCV window flags
+        :param quiet:  If True, don't print FPS info to the console.
         :param ask_user:  'gui' to prompt user for settings, 'cli' to use defaults, 'silent' to use defaults.
         :param mirrored:  True to mirror the image, False to leave it as-is.
 
         """
-        super().__init__(resolution_wh=resolution_wh, window_name=window_name,
-                         callback=callback, mouse_callback=mouse_callback)
+        # settings manager will figure out resolution if not provided
+        self._disp_res = disp_res
         self._settings = UserSettingsManager(index=index,
-                                             res_w_h=resolution_wh,
+                                             res_w_h=frame_res,
                                              mirrored=mirrored,
                                              interaction=ask_user)
+        actual_frame_res = self._settings.get_resolution_wh()
+        super().__init__(actual_frame_res, disp_res, window_name,
+                         callback=callback, mouse_callback=mouse_callback,
+                         keyboard_callback=None, window_flags=window_flags)
         self._pending_settings = Queue()
         self._settings_lock = Lock()
 
-    def shutdown(self):
-        logging.info("Camera got shutdown signal")
-        self._shutdown = True
+    def _disambiguate_resolution(self, frame_res, disp_res):
+        """
+        This was already done by the UserSettingsManager, so just return the frame resolution it returned.
+        """
+        return self._settings.get_resolution_wh(), self._disp_res
+        
 
+    def _stop_making_frames(self):
+        """
+        Camera thread should be watching for self._stop to be True, and exit if it is, so there's no need to do anything here.
+        """
+        pass
 
     def set_mouse_callback(self, new_callback=None):
         self._mouse_callback = new_callback
@@ -75,7 +93,7 @@ class Camera(CameraBase):
             self._pending_settings.put(new_settings)
         logging.info("Queued settings change:  %s" % (new_settings,))
 
-    def set_resolution(self, res_w_h=None):
+    def _set_camera_resolution(self, res_w_h=None):
         """
         Add settings changes to queue (should happen in camera's thread to be safe).
                 (convenience wrapper for change_settings)
@@ -123,7 +141,7 @@ class Camera(CameraBase):
         """
         index = self._settings.get_index()
         resolution = self._settings.get_resolution_wh()
-        self.set_resolution(resolution)  # will be enqueued here...
+        self._set_camera_resolution(resolution)  # will be enqueued here...
         logging.info("Acquiring camera %i..." % (index,))
         cam = open_camera(index)
         self._flush_changes(cam)  # ... and then set here.
@@ -138,7 +156,7 @@ class Camera(CameraBase):
 
         return cam
 
-    def start(self, ):
+    def _start_making_frames(self, ):
         """
         Does not return.
         """
@@ -147,13 +165,12 @@ class Camera(CameraBase):
             raise Exception("Camera thread already started!")
         self._started = True
 
-
         try:
             cam = self._open_camera()
         except ShutdownException:
             return
 
-        while not self._shutdown:
+        while not self._stop:
             # need to change settings?
             if not self._pending_settings.empty():
                 # need to do in same thread
@@ -173,9 +190,24 @@ class Camera(CameraBase):
             else:
                 # mirror image, not real image
                 frame = np.ascontiguousarray(frame)
-            if self._frame_callback is not None:
-                self._frame_callback(frame, frame_time)
+            if self._callback is not None:
+                self._callback(frame, frame_time)
 
         logging.info("Camera:  releasing device...")
         cam.release()
         logging.info("Camera thread finished.")
+
+
+def camera_tester():
+    """
+    Open a camera, open a display window, and display the camera feed in it.
+    """
+    cam = Camera(window_name="Camera tester - Press 'q' to quit.")
+
+    cam.set_frame_callback(cam.auto_display_callback)
+    cam.start()
+    print("Camera thread finished.")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    camera_tester()

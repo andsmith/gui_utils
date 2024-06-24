@@ -116,7 +116,23 @@ class VideoBase(object, metaclass=ABCMeta):
         cv2.resizeWindow(self._window_name, res[0], res[1])
         logging.info("Output resolution set to %s" % (res,))
 
+    def auto_display_callback(self, frame, time):
+        """
+        Default callback to display a frame.
+        :param frame:  numpy array representing an image
+        :param time:  time the frame was generated
+        :return:  True if the user pressed 'q', False otherwise
+        """
+        if self.show(frame, wait=1):
+            self.shutdown()
+            return True
+        return False
+
     def set_frame_callback(self, new_callback=None):
+        """
+        Set the callback to call with new frames.
+        :param new_callback:  function(frame, time) to call with new frames, or None to stop calling any callback.
+        """
         self._callback = new_callback
         logging.info("Frame callback changed.")
 

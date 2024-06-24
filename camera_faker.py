@@ -106,7 +106,7 @@ class BlankFrameGenerator(VideoBase):
                 resp = ChooseItemDialog(prompt="Choose resolution").ask_text(
                     choices=BlankFrameGenerator.COMMON_RESOLUTIONS)
                 frame_res = BlankFrameGenerator.COMMON_RESOLUTIONS[resp]
-            elif self.ask_user == 'cli':
+            elif self._ask_user == 'cli':
                 resp = choose_item_text(
                     prompt="Choose resolution: ", choices=BlankFrameGenerator.COMMON_RESOLUTIONS)
                 frame_res = BlankFrameGenerator.COMMON_RESOLUTIONS[resp]
@@ -155,7 +155,7 @@ def camera_faker_tester():
     """
     Open a frame generator that asks the user for a resolution, then opens a Display to show the solid color frames.
     """
-    video = BlankFrameGenerator(window_name="Fake Camera tester - Press 'q' to quit.", ask_user='gui')
+    video = BlankFrameGenerator(window_name="Fake Camera tester - Press 'q' to quit", ask_user = 'cli')
     def show_frame(frame, time):
         if video.show(frame):
             video.shutdown()
