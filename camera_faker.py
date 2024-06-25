@@ -11,6 +11,7 @@ from .gui_picker import ChooseItemDialog, choose_item_text
 import time
 import cv2
 
+
 class BlankFrameGenerator(VideoBase):
     """
     Generate frames of a solid color, for when not using a camera.
@@ -37,7 +38,7 @@ class BlankFrameGenerator(VideoBase):
         super().__init__(frame_res, disp_res, window_name,
                          callback=callback, mouse_callback=mouse_callback,
                          keyboard_callback=None, window_flags=window_flags)
-        
+
         self._dt = dt
         self._bkg_color = color
         self._make_frame()
@@ -132,30 +133,13 @@ class BlankFrameGenerator(VideoBase):
                 self._callback(frame, time.perf_counter())
 
 
-class FrameGenTester(object):
-    def __init__(self):
-
-        win_name = "frame_gen_test"
-        w, h = (1500, 800)  # fast
-        # w, h = (640, 480)  # slow!
-
-        bkg = COLORS['dark_gray']
-        self._io = BlankFrameGenerator(frame_res=(w, h), color=bkg, window_name=win_name,
-                                       dt=1./30, callback=self._show_new_frame, mouse_callback=None)
-
-    def _show_new_frame(self, frame, t):
-        if self._io.show(frame):
-            self._io.shutdown()
-
-    def start(self):
-        self._io.start()
-
-
 def camera_faker_tester():
     """
     Open a frame generator that asks the user for a resolution, then opens a Display to show the solid color frames.
     """
-    video = BlankFrameGenerator(window_name="Fake Camera tester - Press 'q' to quit", ask_user = 'cli')
+    video = BlankFrameGenerator(
+        window_name="Fake Camera tester - Press 'q' to quit", ask_user='cli')
+
     def show_frame(frame, time):
         if video.show(frame):
             video.shutdown()
