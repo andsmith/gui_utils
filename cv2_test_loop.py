@@ -40,7 +40,7 @@ def test_loop():
     h = 1080
     frame = make_test_frame(w, h)
     window_name = "Test Pattern"
-    #cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
     n_frames = 0
 
@@ -53,6 +53,9 @@ def test_loop():
     t_start_loop = time.perf_counter()
     t_start = t_start_loop
 
+    def _mouse(event, x, y, flags, param):
+        logging.info(f"Mouse event: {event}, x: {x}, y: {y}")
+    cv2.setMouseCallback(window_name, _mouse)
     while True:
         new_frame = make_frame()
         now = time.perf_counter()
