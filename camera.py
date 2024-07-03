@@ -56,9 +56,11 @@ class Camera(VideoBase):
                                              mirrored=mirrored,
                                              interaction=ask_user)
         actual_frame_res = self._settings.get_resolution_wh()
+
         super().__init__(actual_frame_res, disp_res, window_name,
                          callback=callback, mouse_callback=mouse_callback,
-                         keyboard_callback=None, window_flags=window_flags)
+                         keyboard_callback=keyboard_callback, window_flags=window_flags, 
+                         quiet=quiet)
         self._pending_settings = Queue()
         self._settings_lock = Lock()
 
@@ -67,7 +69,6 @@ class Camera(VideoBase):
         This was already done by the UserSettingsManager, so just return the frame resolution it returned.
         """
         return self._settings.get_resolution_wh(), self._disp_res
-        
 
     def _stop_making_frames(self):
         """
@@ -206,7 +207,8 @@ def camera_tester():
 
     cam.set_frame_callback(cam.auto_display_callback)
     cam.start()
-    print("Camera thread finished.")
+    logging.info("Camera thread finished.")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

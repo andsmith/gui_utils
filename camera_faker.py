@@ -37,7 +37,7 @@ class BlankFrameGenerator(VideoBase):
         self._ask_user = ask_user
         super().__init__(frame_res, disp_res, window_name,
                          callback=callback, mouse_callback=mouse_callback,
-                         keyboard_callback=None, window_flags=window_flags)
+                         keyboard_callback=keyboard_callback, window_flags=window_flags)
 
         self._dt = dt
         self._bkg_color = color
