@@ -172,9 +172,11 @@ class VideoBase(object, metaclass=ABCMeta):
         self._fps_info['t_idle'] += t_start - self._t_display_complete
         cv2.imshow(self._window_name, frame)
         k = cv2.waitKey(wait) & 0xFF
+
         if self._keyboard_callback is not None:
             self._keyboard_callback(k)
         elif k == ord('q'):
+            #print("None")
             return True
         self._fps_info['n_frames'] += 1
         if t_start - self._fps_info['t_start'] > self._fps_info['reporting_cycle_seconds']:
