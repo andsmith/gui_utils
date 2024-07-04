@@ -139,6 +139,8 @@ class VideoBase(object, metaclass=ABCMeta):
     def set_mouse_callback(self, new_callback=None):
         self._mouse_callback = new_callback
         logging.info("Mouse callback set.")
+        if self._started:
+            cv2.setMouseCallback(self._window_name, self._mouse_callback)
 
     def set_keyboard_callback(self, callback=None):
         self._keyboard_callback = callback
@@ -150,6 +152,8 @@ class VideoBase(object, metaclass=ABCMeta):
         If the display resolution is still not set set it to the input resolution.
         """
         cv2.namedWindow(self._window_name, self._flags)
+        if self._mouse_callback is not None:
+            cv2.setMouseCallback(self._window_name, self._mouse_callback)
         logging.info("Opened display window with flag:  %s" % (self._flags,))
         if self._disp_res is None:
             self._disp_res = input_resolution
