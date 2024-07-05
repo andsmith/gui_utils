@@ -55,7 +55,7 @@ class BlankFrameGenerator(VideoBase):
         """
         w, h = self._frame_res
         self._frame = np.zeros((h, w, 3), dtype=np.uint8)
-        self._frame[:, :] = (255, 255, 255)
+        self._frame[:, :] = self._bkg_color
 
     def _make_test_frame(self):
         """
