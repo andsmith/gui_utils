@@ -41,7 +41,7 @@ class VideoBase(object, metaclass=ABCMeta):
         self._frame_res, self._disp_res = self._disambiguate_resolution(
             frame_res, disp_res)
         self._stop = False  # loops should watch this and exit if it's True
-        self._started = False
+        self._started_displaying = False
         self._callback = callback
         self._mouse_callback = mouse_callback
         self._keyboard_callback = keyboard_callback
@@ -146,7 +146,7 @@ class VideoBase(object, metaclass=ABCMeta):
     def set_mouse_callback(self, new_callback=None):
         self._mouse_callback = new_callback
         logging.info("Mouse callback set.")
-        if self._started:
+        if self._started_displaying:
             cv2.setMouseCallback(self._window_name, self._mouse_callback)
 
     def set_keyboard_callback(self, callback=None):
@@ -171,7 +171,7 @@ class VideoBase(object, metaclass=ABCMeta):
                          (input_resolution,))
         # self.set_disp_resolution(self._disp_res)  # TODO: FIX THIS, figure out why uncommenting slows down the display
 
-        self._started = True
+        self._started_displaying = True
 
     def show(self, frame, wait=1):
         """
@@ -180,7 +180,7 @@ class VideoBase(object, metaclass=ABCMeta):
         :param wait: time to wait for a key press (ms)
         :return: True if there is no keyboard callback and user pressed 'q', False otherwise
         """
-        if not self._started:
+        if not self._started_displaying:
             self._init_display((frame.shape[1], frame.shape[0]))
 
         t_start = time.perf_counter()

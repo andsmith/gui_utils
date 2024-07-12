@@ -59,7 +59,7 @@ class Camera(VideoBase):
 
         super().__init__(actual_frame_res, disp_res, window_name,
                          callback=callback, mouse_callback=mouse_callback,
-                         keyboard_callback=keyboard_callback, window_flags=window_flags, 
+                         keyboard_callback=keyboard_callback, window_flags=window_flags,
                          quiet=quiet)
         self._pending_settings = Queue()
         self._settings_lock = Lock()
@@ -75,14 +75,6 @@ class Camera(VideoBase):
         Camera thread should be watching for self._stop to be True, and exit if it is, so there's no need to do anything here.
         """
         pass
-
-    def set_mouse_callback(self, new_callback=None):
-        self._mouse_callback = new_callback
-        logging.info("Mouse callback set.")
-        if self._started:
-            # set callback only in same thread as camera & display.
-            cv2.setMouseCallback(self._window_name, new_callback)
-            logging.info("New mouse callback registered.")
 
     def change_settings(self, new_settings):
         """
@@ -155,11 +147,6 @@ class Camera(VideoBase):
         """
         Does not return.
         """
-
-        if self._started:
-            raise Exception("Camera thread already started!")
-        self._started = True
-
         try:
             cam = self._open_camera()
         except ShutdownException:
