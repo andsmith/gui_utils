@@ -149,12 +149,6 @@ class Camera(VideoBase):
         fps = cam.get(cv2.CAP_PROP_FPS)
         logging.info("\tCamera started with FPS:  %s" % (fps,))
 
-        if self._mouse_callback is not None:
-            logging.info("Mouse callback set.")
-            cv2.setMouseCallback(self._window_name, self._mouse_callback)
-        else:
-            logging.info("No mouse callback set.")
-
         return cam
 
     def _start_making_frames(self, ):

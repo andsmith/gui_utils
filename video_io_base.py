@@ -38,7 +38,8 @@ class VideoBase(object, metaclass=ABCMeta):
         """
         self._quiet = quiet
         self._window_name = window_name
-        self._frame_res, self._disp_res = self._disambiguate_resolution(frame_res, disp_res)
+        self._frame_res, self._disp_res = self._disambiguate_resolution(
+            frame_res, disp_res)
         self._stop = False  # loops should watch this and exit if it's True
         self._started = False
         self._callback = callback
@@ -66,6 +67,12 @@ class VideoBase(object, metaclass=ABCMeta):
         :return:  frame_res, disp_res tuple, with the resolutions resolved.
         """
         pass
+
+    def get_input_resolution(self):
+        return self._frame_res
+
+    def get_output_resolution(self):
+        return self._disp_res
 
     @abstractmethod
     def _start_making_frames(self):
@@ -154,10 +161,14 @@ class VideoBase(object, metaclass=ABCMeta):
         cv2.namedWindow(self._window_name, self._flags)
         if self._mouse_callback is not None:
             cv2.setMouseCallback(self._window_name, self._mouse_callback)
+            logging.info("Mouse callback registered.")
+        else:
+            logging.info("No mouse callback registered.")
         logging.info("Opened display window with flag:  %s" % (self._flags,))
         if self._disp_res is None:
             self._disp_res = input_resolution
-            logging.info("Display resolution (automatically) set to %s" % (input_resolution,))
+            logging.info("Display resolution (automatically) set to %s" %
+                         (input_resolution,))
         # self.set_disp_resolution(self._disp_res)  # TODO: FIX THIS, figure out why uncommenting slows down the display
 
         self._started = True
@@ -180,7 +191,6 @@ class VideoBase(object, metaclass=ABCMeta):
         if self._keyboard_callback is not None:
             self._keyboard_callback(k)
         elif k == ord('q'):
-            #print("None")
             return True
         self._fps_info['n_frames'] += 1
         if t_start - self._fps_info['t_start'] > self._fps_info['reporting_cycle_seconds']:
