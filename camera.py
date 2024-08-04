@@ -32,7 +32,7 @@ class Camera(VideoBase):
     WIDTH_FLAG = cv2.CAP_PROP_FRAME_WIDTH
     HEIGHT_FLAG = cv2.CAP_PROP_FRAME_HEIGHT
 
-    def __init__(self, index=0, frame_res=None, disp_res=None, window_name="Camera",
+    def __init__(self, index=None, frame_res=None, disp_res=None, window_name="Camera",
                  callback=None, mouse_callback=None, keyboard_callback=None,
                  window_flags=cv2.WINDOW_AUTOSIZE, quiet=False, ask_user='gui', mirrored=True):
         """
@@ -184,7 +184,8 @@ def camera_tester():
     """
     Open a camera, open a display window, and display the camera feed in it.
     """
-    cam = Camera(window_name="Camera tester - Press 'q' to quit.")
+    cam = Camera(window_name="Camera tester - Press 'q' to quit.",
+                 window_flags=cv2.WINDOW_NORMAL)
 
     cam.set_frame_callback(cam.auto_display_callback)
     cam.start()

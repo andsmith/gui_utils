@@ -36,7 +36,9 @@ class UserSettingsManager(object):
         """
 
         if interaction not in UserSettingsManager.USER_INTERACTION_MODES:
-            raise Exception("Interaction mode must be one of these: %s" % (UserSettingsManager.USER_INTERACTION_MODES,))
+            raise Exception("Interaction mode must be one of these: %s" % (
+                UserSettingsManager.USER_INTERACTION_MODES,))
+
         self._system = SystemCameraConfig()
         self._settings = {'mirrored': mirrored,
                           'index': index,
@@ -48,11 +50,13 @@ class UserSettingsManager(object):
         self._write_settings_file()
 
     def _write_settings_file(self):
-        user_file_path = os.path.expanduser(os.path.join('~', _USER_CAMERA_SETTINGS))
+        user_file_path = os.path.expanduser(
+            os.path.join('~', _USER_CAMERA_SETTINGS))
         with open(user_file_path, 'w') as outfile:
             json.dump(self._settings, outfile)
 
-        logging.info("Wrote new user camera config file:  %s" % (user_file_path,))
+        logging.info("Wrote new user camera config file:  %s" %
+                     (user_file_path,))
 
     def _disambiguate_settings(self, loaded):
         """
@@ -67,7 +71,8 @@ class UserSettingsManager(object):
         if self._settings['index'] is None:
             if loaded['index'] is None:
                 if self._interact != 'quiet':
-                    self._settings['index'] = user_pick_camera(use_gui)
+                    self._settings['index'] = user_pick_camera(self._system.get_n_cameras(),
+                                                               gui=use_gui)
                 else:
                     self._settings['index'] = 0
             else:
@@ -78,11 +83,13 @@ class UserSettingsManager(object):
             self._settings['mirrored'] = loaded['mirrored'] if loaded['mirrored'] is not None else True
 
         # resolve resolution
-        valid_resolutions = self._system.get_cam_resolutions(self._settings['index'])
+        valid_resolutions = self._system.get_cam_resolutions(
+            self._settings['index'])
         if self._settings['res'] is None:
             if loaded['res'] is None:
                 if self._interact != 'quiet':
-                    self._settings['res'] = user_pick_resolution(valid_resolutions, use_gui)
+                    self._settings['res'] = user_pick_resolution(
+                        valid_resolutions, use_gui)
                 else:
                     self._settings['res'] = 640, 480
             else:
@@ -90,14 +97,16 @@ class UserSettingsManager(object):
 
     @staticmethod
     def _load_settings_file():
-        user_file_path = os.path.expanduser(os.path.join('~', _USER_CAMERA_SETTINGS))
+        user_file_path = os.path.expanduser(
+            os.path.join('~', _USER_CAMERA_SETTINGS))
         if os.path.exists(user_file_path):
             logging.info("Found user camera settings file, loading...")
             with open(user_file_path, 'r') as infile:
                 old_settings = json.load(infile)
         else:
             logging.info("User camera settings file not found.")
-            old_settings = {setting: None for setting in UserSettingsManager._SETTINGS}
+            old_settings = {
+                setting: None for setting in UserSettingsManager._SETTINGS}
         return old_settings
 
     def is_mirrored(self):
@@ -144,11 +153,14 @@ def user_pick_resolution(resolution_list, gui=True):
     :param gui:  If true, ask in dialog box, else use the console.
     :return:  (width, height) or None if user opted out of selection.
     """
-    choices = ["%i x %i" % (w, h) for w, h in zip(resolution_list['widths'], resolution_list['heights'])]
+    choices = ["%i x %i" % (w, h) for w, h in zip(
+        resolution_list['widths'], resolution_list['heights'])]
     if gui:
-        selection = ChooseItemDialog(prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
+        selection = ChooseItemDialog(
+            prompt="Choose one of the detected\ncamera resolutions:").ask_text(choices=choices)
     else:
-        selection = choose_item_text(prompt="Choose one of the detected\ncamera resolutions:", choices=choices)
+        selection = choose_item_text(
+            prompt="Choose one of the detected\ncamera resolutions:", choices=choices)
 
     return resolution_list['widths'][selection], resolution_list['heights'][selection]
 
